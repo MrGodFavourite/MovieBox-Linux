@@ -47,4 +47,13 @@ To update the app, replace the zip and/or patch and commit. The new build appear
 
 ## Credits
 
-Based on [mesamirh/MovieBox-Tui](https://github.com/mesamirh/MovieBox-Tui). This repo only contains patches and build automation.
+Based on [mesamirh/MovieBox-Tui](https://github.com/mesamirh/MovieBox-Tui)
+by mesamirh. This is an unofficial, modified version, built with the help of
+AI. Bug reports for this version go to this repo's Issues, not the original
+project.
+
+## License
+
+Licensed under the MIT License, the same as the original project.
+See the [LICENSE](LICENSE) file. Original code © mesamirh; modifications
+© MrGodFavourite.
