@@ -1,0 +1,90 @@
+name: Build Linux
+
+on:
+  push:
+    paths:
+      - moviebox-linux-src.zip
+      - moviebox.patch
+      - .github/workflows/build-linux.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    # 22.04 = older glibc, so the binary runs on Linux Mint 21.x and 22.x
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libssl-dev unzip patch
+
+      - name: Extract moviebox-linux-src.zip
+        run: |
+          rm -rf work src && mkdir work src
+          unzip -q moviebox-linux-src.zip -d work
+          # find the folder that holds Cargo.toml (zip may have a top-level folder or not)
+          ROOT=$(find work -maxdepth 3 -name Cargo.toml -printf '%d %h\n' | sort -n | head -n1 | cut -d' ' -f2-)
+          [ -n "$ROOT" ] || { echo "No Cargo.toml found in moviebox-linux-src.zip"; exit 1; }
+          cp -a "$ROOT"/. src/
+          echo "Source root: $ROOT"
+
+      - name: Apply moviebox.patch
+        working-directory: src
+        run: |
+          if [ ! -s ../moviebox.patch ]; then
+            echo "No patch file or empty, building as-is"
+            exit 0
+          fi
+          ok=""
+          for p in 1 0 2; do
+            if patch -p$p --dry-run -s < ../moviebox.patch >/dev/null 2>&1; then
+              patch -p$p < ../moviebox.patch
+              ok=1
+              break
+            fi
+          done
+          if [ -z "$ok" ]; then
+            echo "Patch does not apply cleanly. Details:"
+            patch -p1 --dry-run < ../moviebox.patch || true
+            exit 1
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src
+
+      - name: Build
+        working-directory: src
+        run: cargo build --release
+
+      - name: Package as moviebox-tui-torrent
+        run: |
+          mkdir -p dist
+          cd src
+          BIN=$(cargo metadata --no-deps --format-version 1 | jq -r '[.packages[].targets[] | select(.kind[]=="bin") | .name][0]')
+          echo "Original binary: $BIN"
+          cp "target/release/$BIN" ../dist/moviebox-tui-torrent
+          strip ../dist/moviebox-tui-torrent || true
+          chmod +x ../dist/moviebox-tui-torrent
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moviebox-tui-torrent
+          path: dist/moviebox-tui-torrent
+
+      # Fixed tag "latest" so the download link never changes
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest build
+          make_latest: true
+          files: dist/moviebox-tui-torrent
+          
