@@ -1,6 +1,6 @@
 diff -ruN a/Cargo.toml b/Cargo.toml
---- a/Cargo.toml	2026-11-21 10:26:18.941502264 +0000
-+++ b/Cargo.toml	2026-11-21 10:26:18.963699238 +0000
+--- a/Cargo.toml	2026-11-21 18:33:40.815679845 +0000
++++ b/Cargo.toml	2026-11-21 18:33:40.824632326 +0000
 @@ -60,6 +60,7 @@
  tar = "0.4.44"
  zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
@@ -10,8 +10,8 @@ diff -ruN a/Cargo.toml b/Cargo.toml
  [lib]
  name = "moviebox_tui"
 diff -ruN a/docs/addons-mode.md b/docs/addons-mode.md
---- a/docs/addons-mode.md	2026-11-21 10:26:18.942209377 +0000
-+++ b/docs/addons-mode.md	2026-11-21 10:26:18.959472539 +0000
+--- a/docs/addons-mode.md	2026-11-21 18:33:40.815887721 +0000
++++ b/docs/addons-mode.md	2026-11-21 18:33:40.820830774 +0000
 @@ -6,7 +6,7 @@
  
  - **Switch to Addons**: Press `Ctrl+P` on the home screen until `[Addons]` is selected.
@@ -65,8 +65,8 @@ diff -ruN a/docs/addons-mode.md b/docs/addons-mode.md
  
  Installed addons are saved to `addons_config.json` in your configuration directory:
 diff -ruN a/src/cache.rs b/src/cache.rs
---- a/src/cache.rs	2026-11-21 10:26:18.943137939 +0000
-+++ b/src/cache.rs	2026-11-21 10:26:18.961875695 +0000
+--- a/src/cache.rs	2026-11-21 18:33:40.816155660 +0000
++++ b/src/cache.rs	2026-11-21 18:33:40.821129069 +0000
 @@ -10,6 +10,17 @@
  const CACHE_EXPIRY_SECS: u64 = 24 * 60 * 60;
  const STREAM_CACHE_EXPIRY_SECS: u64 = 2 * 60 * 60;
@@ -160,8 +160,8 @@ diff -ruN a/src/cache.rs b/src/cache.rs
  
  pub fn get_homepage_path(tab_id: &str, page: usize) -> PathBuf {
 diff -ruN a/src/config.rs b/src/config.rs
---- a/src/config.rs	2026-11-21 10:26:18.943244661 +0000
-+++ b/src/config.rs	2026-11-21 10:26:18.961896844 +0000
+--- a/src/config.rs	2026-11-21 18:33:40.816223735 +0000
++++ b/src/config.rs	2026-11-21 18:33:40.821160484 +0000
 @@ -267,6 +267,49 @@
      Config::default()
  }
@@ -231,8 +231,8 @@ diff -ruN a/src/config.rs b/src/config.rs
  }
  
 diff -ruN a/src/download.rs b/src/download.rs
---- a/src/download.rs	2026-11-21 10:26:18.943336665 +0000
-+++ b/src/download.rs	2026-11-21 10:26:18.961966395 +0000
+--- a/src/download.rs	2026-11-21 18:33:40.816252020 +0000
++++ b/src/download.rs	2026-11-21 18:33:40.821179991 +0000
 @@ -173,13 +173,27 @@
  where
      F: FnMut(DownloadProgress),
@@ -263,8 +263,8 @@ diff -ruN a/src/download.rs b/src/download.rs
      for attempt in 1..=MAX_ATTEMPTS {
          let is_segmented_state = metadata.segments.is_some();
 diff -ruN a/src/lib.rs b/src/lib.rs
---- a/src/lib.rs	2026-11-21 10:26:18.943579585 +0000
-+++ b/src/lib.rs	2026-11-21 10:26:18.961992382 +0000
+--- a/src/lib.rs	2026-11-21 18:33:40.816314463 +0000
++++ b/src/lib.rs	2026-11-21 18:33:40.821207894 +0000
 @@ -10,5 +10,6 @@
  pub mod providers;
  pub mod proxy;
@@ -273,8 +273,8 @@ diff -ruN a/src/lib.rs b/src/lib.rs
  pub mod tui;
  pub mod updater;
 diff -ruN a/src/main.rs b/src/main.rs
---- a/src/main.rs	2026-11-21 10:26:18.943677704 +0000
-+++ b/src/main.rs	2026-11-21 10:26:18.962004325 +0000
+--- a/src/main.rs	2026-11-21 18:33:40.816338144 +0000
++++ b/src/main.rs	2026-11-21 18:33:40.821250665 +0000
 @@ -155,5 +155,6 @@
      if let Err(err) = app.run(&mut terminal).await {
          log::error!("application error: {err}");
@@ -283,8 +283,8 @@ diff -ruN a/src/main.rs b/src/main.rs
      Ok(())
  }
 diff -ruN a/src/models.rs b/src/models.rs
---- a/src/models.rs	2026-11-21 10:26:18.943720216 +0000
-+++ b/src/models.rs	2026-11-21 10:26:18.962017173 +0000
+--- a/src/models.rs	2026-11-21 18:33:40.816349331 +0000
++++ b/src/models.rs	2026-11-21 18:33:40.821273404 +0000
 @@ -183,6 +183,9 @@
      pub title: String,
      pub message: String,
@@ -321,8 +321,8 @@ diff -ruN a/src/models.rs b/src/models.rs
      }
  }
 diff -ruN a/src/player.rs b/src/player.rs
---- a/src/player.rs	2026-11-21 10:26:18.944134850 +0000
-+++ b/src/player.rs	2026-11-21 10:26:18.962030215 +0000
+--- a/src/player.rs	2026-11-21 18:33:40.816378004 +0000
++++ b/src/player.rs	2026-11-21 18:33:40.821288475 +0000
 @@ -477,6 +477,7 @@
      }
      command.arg(format!("{prefix}geometry=50%:50%"));
@@ -449,8 +449,8 @@ diff -ruN a/src/player.rs b/src/player.rs
  mod tests {
      use super::*;
 diff -ruN a/src/providers/addons/adapter.rs b/src/providers/addons/adapter.rs
---- a/src/providers/addons/adapter.rs	2026-11-21 10:26:18.944425240 +0000
-+++ b/src/providers/addons/adapter.rs	2026-11-21 10:26:18.959786327 +0000
+--- a/src/providers/addons/adapter.rs	2026-11-21 18:33:40.816994933 +0000
++++ b/src/providers/addons/adapter.rs	2026-11-21 18:33:40.821398838 +0000
 @@ -457,16 +457,114 @@
      None
  }
@@ -742,8 +742,8 @@ diff -ruN a/src/providers/addons/adapter.rs b/src/providers/addons/adapter.rs
          let item = MetaItem {
              id: "tt1234".to_string(),
 diff -ruN a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator.rs
---- a/src/providers/addons/aggregator.rs	2026-11-21 10:26:18.944485017 +0000
-+++ b/src/providers/addons/aggregator.rs	2026-11-21 10:26:18.959807890 +0000
+--- a/src/providers/addons/aggregator.rs	2026-11-21 18:33:40.817015756 +0000
++++ b/src/providers/addons/aggregator.rs	2026-11-21 18:33:40.821419370 +0000
 @@ -1,7 +1,12 @@
  use super::adapter::stream_item_to_release;
  use super::client::AddonClient;
@@ -1315,8 +1315,8 @@ diff -ruN a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator
 +    }
  }
 diff -ruN a/src/providers/addons/client.rs b/src/providers/addons/client.rs
---- a/src/providers/addons/client.rs	2026-11-21 10:26:18.944534854 +0000
-+++ b/src/providers/addons/client.rs	2026-11-21 10:26:18.959823974 +0000
+--- a/src/providers/addons/client.rs	2026-11-21 18:33:40.817032056 +0000
++++ b/src/providers/addons/client.rs	2026-11-21 18:33:40.821441652 +0000
 @@ -1,7 +1,14 @@
 -use super::models::{AddonManifest, MetaDetail, MetaItem, StreamItem};
 +use super::models::{
@@ -1728,8 +1728,8 @@ diff -ruN a/src/providers/addons/client.rs b/src/providers/addons/client.rs
 +    }
 +}
 diff -ruN a/src/providers/addons/mod.rs b/src/providers/addons/mod.rs
---- a/src/providers/addons/mod.rs	2026-11-21 10:26:18.944581564 +0000
-+++ b/src/providers/addons/mod.rs	2026-11-21 10:26:18.959841026 +0000
+--- a/src/providers/addons/mod.rs	2026-11-21 18:33:40.817045787 +0000
++++ b/src/providers/addons/mod.rs	2026-11-21 18:33:40.821460173 +0000
 @@ -2,12 +2,18 @@
  pub mod aggregator;
  pub mod client;
@@ -1750,7 +1750,7 @@ diff -ruN a/src/providers/addons/mod.rs b/src/providers/addons/mod.rs
  pub use client::AddonClient;
  pub use models::{AddonManifest, InstalledAddon, MetaDetail, MetaItem, StreamItem};
  
-@@ -111,42 +117,58 @@
+@@ -111,42 +117,68 @@
              vec!["series", "movie", "tv", "anime", "other"]
          };
  
@@ -1815,30 +1815,79 @@ diff -ruN a/src/providers/addons/mod.rs b/src/providers/addons/mod.rs
 +        });
 +        let results = futures::future::join_all(lookups).await;
 +
-+        let mut best_primary: Option<models::MetaDetail> = None;
++        let mut primaries: Vec<models::MetaDetail> = Vec::new();
 +        let mut best_fallback: Option<models::MetaDetail> = None;
 +        for (detail, primary) in results {
 +            let Some(d) = detail else { continue };
 +            if primary {
-+                let better = best_primary
-+                    .as_ref()
-+                    .is_none_or(|b| d.videos.len() > b.videos.len());
-+                if better {
-+                    best_primary = Some(d);
-+                }
++                primaries.push(d);
 +            } else if best_fallback.is_none() {
 +                best_fallback = Some(d);
              }
          }
  
 -        if let Some(d) = best_detail {
++        // Base = the addon with the most episodes. Episodes the others have and
++        // the base lacks (e.g. a brand-new season) are added on top of it.
++        let mut best_primary: Option<models::MetaDetail> = None;
++        if !primaries.is_empty() {
++            let mut base_idx = 0;
++            for (i, d) in primaries.iter().enumerate() {
++                if d.videos.len() > primaries[base_idx].videos.len() {
++                    base_idx = i;
++                }
++            }
++            let mut base = primaries.remove(base_idx);
++            merge_meta_videos(&mut base, &primaries);
++            best_primary = Some(base);
++        }
++
 +        if let Some(d) = best_primary.or(best_fallback) {
              let mut details = adapter::meta_detail_to_media_details(&d);
              if let Some(hint) = &type_hint {
                  details.id.value = format!("{hint}:{clean_id}");
+@@ -157,3 +189,38 @@
+         Err(ProviderError::NotFound)
+     }
+ }
++
++fn video_key(v: &models::MetaVideo) -> (usize, usize) {
++    (
++        v.season.unwrap_or(1),
++        v.episode.or(v.number).unwrap_or(1),
++    )
++}
++
++/// Adds episodes from `others` that `base` does not have, and fills blank
++/// titles/overviews/thumbnails of episodes it already has.
++fn merge_meta_videos(base: &mut models::MetaDetail, others: &[models::MetaDetail]) {
++    for other in others {
++        for v in &other.videos {
++            let key = video_key(v);
++            if let Some(existing) = base.videos.iter_mut().find(|b| video_key(b) == key) {
++                if existing.title.is_none() && existing.name.is_none() {
++                    existing.title = v.title.clone();
++                    existing.name = v.name.clone();
++                }
++                if existing.overview.is_none() && existing.description.is_none() {
++                    existing.overview = v.overview.clone();
++                    existing.description = v.description.clone();
++                }
++                if existing.thumbnail.is_none() {
++                    existing.thumbnail = v.thumbnail.clone();
++                }
++                if existing.released.is_none() {
++                    existing.released = v.released.clone();
++                }
++            } else {
++                base.videos.push(v.clone());
++            }
++        }
++    }
++}
 diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
---- a/src/providers/addons/models.rs	2026-11-21 10:26:18.944688190 +0000
-+++ b/src/providers/addons/models.rs	2026-11-21 10:26:18.959853259 +0000
+--- a/src/providers/addons/models.rs	2026-11-21 18:33:40.817059128 +0000
++++ b/src/providers/addons/models.rs	2026-11-21 18:33:40.821475526 +0000
 @@ -130,6 +130,27 @@
      deserializer.deserialize_any(StringOrNumberVisitor)
  }
@@ -2134,7 +2183,7 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
 +}
 diff -ruN a/src/providers/addons/nuvio.rs b/src/providers/addons/nuvio.rs
 --- a/src/providers/addons/nuvio.rs	1970-01-01 00:00:00.000000000 +0000
-+++ b/src/providers/addons/nuvio.rs	2026-11-21 10:26:18.959870585 +0000
++++ b/src/providers/addons/nuvio.rs	2026-11-21 18:33:40.821991461 +0000
 @@ -0,0 +1,862 @@
 +//! Nuvio plugin support.
 +//!
@@ -3000,7 +3049,7 @@ diff -ruN a/src/providers/addons/nuvio.rs b/src/providers/addons/nuvio.rs
 +}
 diff -ruN a/src/providers/addons/nuvio_runner.cjs b/src/providers/addons/nuvio_runner.cjs
 --- a/src/providers/addons/nuvio_runner.cjs	1970-01-01 00:00:00.000000000 +0000
-+++ b/src/providers/addons/nuvio_runner.cjs	2026-11-21 10:26:18.959891125 +0000
++++ b/src/providers/addons/nuvio_runner.cjs	2026-11-21 18:33:40.822019515 +0000
 @@ -0,0 +1,186 @@
 +'use strict';
 +// Runs one Nuvio scraper (a JavaScript file exposing getStreams) and prints
@@ -3190,7 +3239,7 @@ diff -ruN a/src/providers/addons/nuvio_runner.cjs b/src/providers/addons/nuvio_r
 +main().catch((e) => finish({ error: String(e && e.message ? e.message : e) }, 1));
 diff -ruN a/src/providers/addons/torrent.rs b/src/providers/addons/torrent.rs
 --- a/src/providers/addons/torrent.rs	1970-01-01 00:00:00.000000000 +0000
-+++ b/src/providers/addons/torrent.rs	2026-11-21 10:26:18.959951576 +0000
++++ b/src/providers/addons/torrent.rs	2026-11-21 18:33:40.822037095 +0000
 @@ -0,0 +1,503 @@
 +//! Torrent helpers for addon streams: smart file selection, peer-source hints
 +//! and lazy preparation of the built-in torrent engine (`crate::torrent_engine`).
@@ -3696,8 +3745,8 @@ diff -ruN a/src/providers/addons/torrent.rs b/src/providers/addons/torrent.rs
 +    }
 +}
 diff -ruN a/src/service.rs b/src/service.rs
---- a/src/service.rs	2026-11-21 10:26:18.947849359 +0000
-+++ b/src/service.rs	2026-11-21 10:26:18.962068295 +0000
+--- a/src/service.rs	2026-11-21 18:33:40.817683494 +0000
++++ b/src/service.rs	2026-11-21 18:33:40.823760030 +0000
 @@ -137,6 +137,59 @@
          Ok(items)
      }
@@ -3760,7 +3809,7 @@ diff -ruN a/src/service.rs b/src/service.rs
          provider: ProviderKind,
 diff -ruN a/src/torrent_engine.rs b/src/torrent_engine.rs
 --- a/src/torrent_engine.rs	1970-01-01 00:00:00.000000000 +0000
-+++ b/src/torrent_engine.rs	2026-11-21 10:26:18.962087402 +0000
++++ b/src/torrent_engine.rs	2026-11-21 18:33:40.822741384 +0000
 @@ -0,0 +1,756 @@
 +//! Built-in torrent engine.
 +//!
@@ -4519,8 +4568,8 @@ diff -ruN a/src/torrent_engine.rs b/src/torrent_engine.rs
 +    }
 +}
 diff -ruN a/src/tui/action.rs b/src/tui/action.rs
---- a/src/tui/action.rs	2026-11-21 10:26:18.947993721 +0000
-+++ b/src/tui/action.rs	2026-11-21 10:26:18.961682490 +0000
+--- a/src/tui/action.rs	2026-11-21 18:33:40.817721227 +0000
++++ b/src/tui/action.rs	2026-11-21 18:33:40.823627085 +0000
 @@ -118,6 +118,25 @@
          usize,
          Vec<crate::providers::models::Release>,
@@ -4548,8 +4597,8 @@ diff -ruN a/src/tui/action.rs b/src/tui/action.rs
          crate::providers::models::RequestContext,
          u64,
 diff -ruN a/src/tui/app/addons.rs b/src/tui/app/addons.rs
---- a/src/tui/app/addons.rs	2026-11-21 10:26:18.948193539 +0000
-+++ b/src/tui/app/addons.rs	2026-11-21 10:26:18.961105106 +0000
+--- a/src/tui/app/addons.rs	2026-11-21 18:33:40.817759617 +0000
++++ b/src/tui/app/addons.rs	2026-11-21 18:33:40.822814600 +0000
 @@ -41,6 +41,37 @@
                  let sender = self.action_sender.clone();
  
@@ -4626,8 +4675,8 @@ diff -ruN a/src/tui/app/addons.rs b/src/tui/app/addons.rs
                              sender
                                  .send(Action::SetStatus(format!(
 diff -ruN a/src/tui/app/download.rs b/src/tui/app/download.rs
---- a/src/tui/app/download.rs	2026-11-21 10:26:18.948315096 +0000
-+++ b/src/tui/app/download.rs	2026-11-21 10:26:18.961117923 +0000
+--- a/src/tui/app/download.rs	2026-11-21 18:33:40.817776712 +0000
++++ b/src/tui/app/download.rs	2026-11-21 18:33:40.822831591 +0000
 @@ -583,10 +583,23 @@
                          {
                              let sender_clone = self.action_sender.clone();
@@ -4654,8 +4703,8 @@ diff -ruN a/src/tui/app/download.rs b/src/tui/app/download.rs
                                      max_height,
                                  ))
 diff -ruN a/src/tui/app/favorites.rs b/src/tui/app/favorites.rs
---- a/src/tui/app/favorites.rs	2026-11-21 10:26:18.948387878 +0000
-+++ b/src/tui/app/favorites.rs	2026-11-21 10:26:18.961141285 +0000
+--- a/src/tui/app/favorites.rs	2026-11-21 18:33:40.817809747 +0000
++++ b/src/tui/app/favorites.rs	2026-11-21 18:33:40.822861510 +0000
 @@ -154,6 +154,8 @@
              self.state.search_preview.as_ref(),
          ));
@@ -4675,8 +4724,8 @@ diff -ruN a/src/tui/app/favorites.rs b/src/tui/app/favorites.rs
          self.state.is_fetching_streams = false;
          self.state.stream_error = None;
 diff -ruN a/src/tui/app/keyboard.rs b/src/tui/app/keyboard.rs
---- a/src/tui/app/keyboard.rs	2026-11-21 10:26:18.948606876 +0000
-+++ b/src/tui/app/keyboard.rs	2026-11-21 10:26:18.961155444 +0000
+--- a/src/tui/app/keyboard.rs	2026-11-21 18:33:40.817823922 +0000
++++ b/src/tui/app/keyboard.rs	2026-11-21 18:33:40.822877039 +0000
 @@ -82,6 +82,33 @@
              }
          }
@@ -4753,8 +4802,8 @@ diff -ruN a/src/tui/app/keyboard.rs b/src/tui/app/keyboard.rs
                              self.action_sender.send(Action::ToggleHelp).ok();
                          }
 diff -ruN a/src/tui/app/mouse.rs b/src/tui/app/mouse.rs
---- a/src/tui/app/mouse.rs	2026-11-21 10:26:18.948774918 +0000
-+++ b/src/tui/app/mouse.rs	2026-11-21 10:26:18.961184532 +0000
+--- a/src/tui/app/mouse.rs	2026-11-21 18:33:40.817874439 +0000
++++ b/src/tui/app/mouse.rs	2026-11-21 18:33:40.822910393 +0000
 @@ -1128,11 +1128,38 @@
  
          if streams_area.contains(ratatui::layout::Position::new(col, row)) {
@@ -4826,8 +4875,8 @@ diff -ruN a/src/tui/app/mouse.rs b/src/tui/app/mouse.rs
                          self.action_sender.send(Action::TabPane).ok();
                      }
 diff -ruN a/src/tui/app/navigation.rs b/src/tui/app/navigation.rs
---- a/src/tui/app/navigation.rs	2026-11-21 10:26:18.948858032 +0000
-+++ b/src/tui/app/navigation.rs	2026-11-21 10:26:18.961209143 +0000
+--- a/src/tui/app/navigation.rs	2026-11-21 18:33:40.817905975 +0000
++++ b/src/tui/app/navigation.rs	2026-11-21 18:33:40.822957275 +0000
 @@ -117,7 +117,6 @@
              || self.state.is_loading
              || self.state.search_results.is_empty()
@@ -4983,8 +5032,8 @@ diff -ruN a/src/tui/app/navigation.rs b/src/tui/app/navigation.rs
              self.state.is_fetching_streams = false;
              self.state.stream_error = None;
 diff -ruN a/src/tui/app/playback.rs b/src/tui/app/playback.rs
---- a/src/tui/app/playback.rs	2026-11-21 10:26:18.948990721 +0000
-+++ b/src/tui/app/playback.rs	2026-11-21 10:26:18.961235024 +0000
+--- a/src/tui/app/playback.rs	2026-11-21 18:33:40.817932166 +0000
++++ b/src/tui/app/playback.rs	2026-11-21 18:33:40.822984059 +0000
 @@ -16,6 +16,63 @@
      NoPlayersInstalled,
  }
@@ -5283,8 +5332,8 @@ diff -ruN a/src/tui/app/playback.rs b/src/tui/app/playback.rs
 +    }
  }
 diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
---- a/src/tui/app/requests.rs	2026-11-21 10:26:18.949324343 +0000
-+++ b/src/tui/app/requests.rs	2026-11-21 10:26:18.961261589 +0000
+--- a/src/tui/app/requests.rs	2026-11-21 18:33:40.817969217 +0000
++++ b/src/tui/app/requests.rs	2026-11-21 18:33:40.823022464 +0000
 @@ -416,9 +416,13 @@
  
                  if page <= 1 {
@@ -5651,8 +5700,8 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                  context,
                  request_id,
 diff -ruN a/src/tui/app/run.rs b/src/tui/app/run.rs
---- a/src/tui/app/run.rs	2026-11-21 10:26:18.949467875 +0000
-+++ b/src/tui/app/run.rs	2026-11-21 10:26:18.961292232 +0000
+--- a/src/tui/app/run.rs	2026-11-21 18:33:40.818000577 +0000
++++ b/src/tui/app/run.rs	2026-11-21 18:33:40.823059298 +0000
 @@ -462,6 +462,8 @@
              | Action::PreviewFailure(..)
              | Action::FetchEpisodeStreams { .. }
@@ -5663,8 +5712,8 @@ diff -ruN a/src/tui/app/run.rs b/src/tui/app/run.rs
              | Action::InitStreamPool(..)
              | Action::StreamPoolInitialized(..)
 diff -ruN a/src/tui/app/search.rs b/src/tui/app/search.rs
---- a/src/tui/app/search.rs	2026-11-21 10:26:18.949558233 +0000
-+++ b/src/tui/app/search.rs	2026-11-21 10:26:18.961336062 +0000
+--- a/src/tui/app/search.rs	2026-11-21 18:33:40.818031424 +0000
++++ b/src/tui/app/search.rs	2026-11-21 18:33:40.823090519 +0000
 @@ -156,7 +156,50 @@
                          format!("Available in Streaming Mode ({ctrl_s})."),
                      );
@@ -5752,8 +5801,8 @@ diff -ruN a/src/tui/app/search.rs b/src/tui/app/search.rs
                  self.action_sender
                      .send(Action::DetailsSuccess(
 diff -ruN a/src/tui/app/system.rs b/src/tui/app/system.rs
---- a/src/tui/app/system.rs	2026-11-21 10:26:18.949635091 +0000
-+++ b/src/tui/app/system.rs	2026-11-21 10:26:18.961313438 +0000
+--- a/src/tui/app/system.rs	2026-11-21 18:33:40.818048723 +0000
++++ b/src/tui/app/system.rs	2026-11-21 18:33:40.823109699 +0000
 @@ -8,6 +8,7 @@
                  let mut needs_redraw = (self.state.is_loading && self.state.tick_count % 5 == 0)
                      || self.state.tick_count < 15;
@@ -5775,8 +5824,8 @@ diff -ruN a/src/tui/app/system.rs b/src/tui/app/system.rs
                                      let provider_key =
                                          self.provider_for_subject(&subject_id).cache_key();
 diff -ruN a/src/tui/commands.rs b/src/tui/commands.rs
---- a/src/tui/commands.rs	2026-11-21 10:26:18.949754889 +0000
-+++ b/src/tui/commands.rs	2026-11-21 10:26:18.961695523 +0000
+--- a/src/tui/commands.rs	2026-11-21 18:33:40.818080057 +0000
++++ b/src/tui/commands.rs	2026-11-21 18:33:40.823152011 +0000
 @@ -77,6 +77,33 @@
          let lower = query.to_ascii_lowercase();
          let mut results = Vec::new();
@@ -5823,8 +5872,8 @@ diff -ruN a/src/tui/commands.rs b/src/tui/commands.rs
              "/settings" => Some(Self::Settings.description(state)),
              "/config" => Some(Self::Config.description(state)),
 diff -ruN a/src/tui/overlay.rs b/src/tui/overlay.rs
---- a/src/tui/overlay.rs	2026-11-21 10:26:18.950036721 +0000
-+++ b/src/tui/overlay.rs	2026-11-21 10:26:18.961710327 +0000
+--- a/src/tui/overlay.rs	2026-11-21 18:33:40.818115851 +0000
++++ b/src/tui/overlay.rs	2026-11-21 18:33:40.823168447 +0000
 @@ -557,6 +557,22 @@
      cards
  }
@@ -5901,8 +5950,8 @@ diff -ruN a/src/tui/overlay.rs b/src/tui/overlay.rs
  
          let block = Block::default()
 diff -ruN a/src/tui/screens/details.rs b/src/tui/screens/details.rs
---- a/src/tui/screens/details.rs	2026-11-21 10:26:18.950146863 +0000
-+++ b/src/tui/screens/details.rs	2026-11-21 10:26:18.961392199 +0000
+--- a/src/tui/screens/details.rs	2026-11-21 18:33:40.818146263 +0000
++++ b/src/tui/screens/details.rs	2026-11-21 18:33:40.823233626 +0000
 @@ -10,7 +10,7 @@
  use ratatui::{
      Frame,
@@ -6428,8 +6477,8 @@ diff -ruN a/src/tui/screens/details.rs b/src/tui/screens/details.rs
 +    }
  }
 diff -ruN a/src/tui/screens/home.rs b/src/tui/screens/home.rs
---- a/src/tui/screens/home.rs	2026-11-21 10:26:18.950566864 +0000
-+++ b/src/tui/screens/home.rs	2026-11-21 10:26:18.961459644 +0000
+--- a/src/tui/screens/home.rs	2026-11-21 18:33:40.818205220 +0000
++++ b/src/tui/screens/home.rs	2026-11-21 18:33:40.823300800 +0000
 @@ -3101,6 +3101,7 @@
                      provides_stream: false,
                      id_prefixes: vec![],
@@ -6455,8 +6504,8 @@ diff -ruN a/src/tui/screens/home.rs b/src/tui/screens/home.rs
              ],
              addon_manager_selected: 2,
 diff -ruN a/src/tui/state.rs b/src/tui/state.rs
---- a/src/tui/state.rs	2026-11-21 10:26:18.950766793 +0000
-+++ b/src/tui/state.rs	2026-11-21 10:26:18.961732219 +0000
+--- a/src/tui/state.rs	2026-11-21 18:33:40.818248522 +0000
++++ b/src/tui/state.rs	2026-11-21 18:33:40.823365495 +0000
 @@ -182,6 +182,8 @@
      pub selected_details: Option<MediaDetails>,
      pub active_subject_id: Option<String>,
@@ -6750,8 +6799,8 @@ diff -ruN a/src/tui/state.rs b/src/tui/state.rs
 +    }
  }
 diff -ruN a/tests/addons_manifest.rs b/tests/addons_manifest.rs
---- a/tests/addons_manifest.rs	2026-11-21 10:26:18.952513527 +0000
-+++ b/tests/addons_manifest.rs	2026-11-21 10:26:18.963679799 +0000
+--- a/tests/addons_manifest.rs	2026-11-21 18:33:40.818567300 +0000
++++ b/tests/addons_manifest.rs	2026-11-21 18:33:40.823800426 +0000
 @@ -117,6 +117,7 @@
              description: None,
              url: Some("https://cdn.example.com/s01e08_1080p.mp4".to_string()),
