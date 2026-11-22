@@ -11,7 +11,7 @@ index cd429d8..58f411d 100644
  [lib]
  name = "moviebox_tui"
 diff --git a/docs/addons-mode.md b/docs/addons-mode.md
-index 63c8e56..5814fec 100644
+index 63c8e56..2704d31 100644
 --- a/docs/addons-mode.md
 +++ b/docs/addons-mode.md
 @@ -6,7 +6,7 @@ MovieBox-TUI supports Stremio HTTP addons. You can install standard addon manife
@@ -19,7 +19,7 @@ index 63c8e56..5814fec 100644
  - **Switch to Addons**: Press `Ctrl+P` on the home screen until `[Addons]` is selected.
  - **Open Addon Manager**: Type `/config` or click `[Addons]` in the search bar.
 -- **Browse Catalogs**: Type `/browse` to view Top Movies, Top Series, and curated lists.
-+- **Browse Catalogs**: Type `/browse` (or `/browse <catalog>`, e.g. `/browse anime` or `/browse top rated`) to browse all catalogs exposed by your enabled addons with automatic pagination.
++- **Browse Catalogs**: Type `/browse` (or `/browse <catalog>`, e.g. `/browse top rated`) to browse Cinemeta catalogs (Top Movies, Top Series, Top Rated Movies, Top Rated Series) with automatic pagination.
  - **Search**: Type in the search bar to search titles across installed addons.
  
  ## Addon Manager
@@ -1877,7 +1877,7 @@ index 131f001..d405adb 100644
 +    }
 +}
 diff --git a/src/providers/addons/mod.rs b/src/providers/addons/mod.rs
-index 6d7af7f..8165417 100644
+index 6d7af7f..f6fa808 100644
 --- a/src/providers/addons/mod.rs
 +++ b/src/providers/addons/mod.rs
 @@ -2,12 +2,18 @@ pub mod adapter;
@@ -2098,7 +2098,7 @@ index 6d7af7f..8165417 100644
 +/// searchable catalog are skipped instead of being sent made-up requests.
 +fn search_targets(addons: &[InstalledAddon]) -> Vec<SearchTarget> {
 +    let mut targets: Vec<SearchTarget> = Vec::new();
-+    for addon in addons.iter().filter(|a| a.enabled) {
++    for addon in addons.iter().filter(|a| a.enabled && a.is_core()) {
 +        let base_url = AddonClient::base_addon_url(&addon.manifest_url);
 +        let mut wanted: Vec<(String, String)> = Vec::new();
 +        for cat in &addon.catalogs {
@@ -2171,7 +2171,7 @@ index 6d7af7f..8165417 100644
 +    }
 +}
 diff --git a/src/providers/addons/models.rs b/src/providers/addons/models.rs
-index 7b392a9..1a50bb9 100644
+index 7b392a9..512ded1 100644
 --- a/src/providers/addons/models.rs
 +++ b/src/providers/addons/models.rs
 @@ -130,6 +130,27 @@ where
@@ -2354,7 +2354,7 @@ index 7b392a9..1a50bb9 100644
      let enabled_catalogs: Vec<&InstalledAddon> = addons
          .iter()
 -        .filter(|a| a.enabled && a.provides_catalog)
-+        .filter(|a| a.enabled && (a.is_core() || !a.catalogs.is_empty()))
++        .filter(|a| a.enabled && a.is_core())
          .collect();
  
      let multi = enabled_catalogs.len() > 1;
@@ -7190,7 +7190,7 @@ index 87033f8..94dac61 100644
 +    }
  }
 diff --git a/tests/addons_manifest.rs b/tests/addons_manifest.rs
-index 6f3eb39..9e63399 100644
+index 6f3eb39..3f13a40 100644
 --- a/tests/addons_manifest.rs
 +++ b/tests/addons_manifest.rs
 @@ -117,6 +117,7 @@ fn test_addon_episode_stream_filtering_and_isolation() {
@@ -7241,7 +7241,7 @@ index 6f3eb39..9e63399 100644
      };
  
      let release = stream_item_to_release("HdHub", &stream, 1, 1).expect("valid release");
-@@ -291,10 +297,59 @@ fn test_installed_addon_cinemeta_protection() {
+@@ -291,10 +297,61 @@ fn test_installed_addon_cinemeta_protection() {
          provides_stream: true,
          id_prefixes: vec!["tt".to_string()],
          types: vec!["movie".to_string(), "series".to_string()],
@@ -7251,7 +7251,7 @@ index 6f3eb39..9e63399 100644
  }
  
 +#[test]
-+fn test_curated_catalog_presets_includes_installed_addon_catalogs_and_skips_search_only() {
++fn test_curated_catalog_presets_keeps_only_cinemeta_even_when_addons_have_catalogs() {
 +    use moviebox_tui::providers::addons::models::{
 +        AddonManifest, CatalogDefinition, CatalogExtra, curated_catalog_presets,
 +        find_catalog_preset,
@@ -7278,13 +7278,15 @@ index 6f3eb39..9e63399 100644
 +
 +    let addons = vec![InstalledAddon::cinemeta_default(), kitsu];
 +    let presets = curated_catalog_presets(&addons);
-+    assert!(presets.iter().any(|p| p.catalog_id == "kitsu-anime-trending"));
-+    assert!(presets.iter().any(|p| p.catalog_id == "kitsu-anime-popular"));
++    assert!(!presets.iter().any(|p| p.catalog_id == "kitsu-anime-trending"));
++    assert!(!presets.iter().any(|p| p.catalog_id == "kitsu-anime-popular"));
 +    assert!(!presets.iter().any(|p| p.catalog_id == "kitsu-anime-search"));
++    assert!(presets.iter().all(|p| p.addon_name == "Cinemeta"));
++    assert!(!presets.is_empty());
 +
-+    let matched = find_catalog_preset(&addons, "trending").expect("trending preset");
-+    assert_eq!(matched.catalog_id, "kitsu-anime-trending");
-+    assert_eq!(matched.addon_name, "Kitsu Anime");
++    assert!(find_catalog_preset(&addons, "trending").is_none());
++    let matched = find_catalog_preset(&addons, "top rated").expect("cinemeta preset");
++    assert_eq!(matched.addon_name, "Cinemeta");
 +
 +    let _ = (CatalogDefinition {
 +        r#type: "movie".to_string(),
@@ -7301,7 +7303,7 @@ index 6f3eb39..9e63399 100644
  #[tokio::test]
  async fn test_invalid_addon_manifest_url_shows_actionable_error_and_preserves_state() {
      let client = moviebox_tui::providers::addons::client::AddonClient::new();
-@@ -319,7 +374,7 @@ async fn test_invalid_addon_manifest_url_shows_actionable_error_and_preserves_st
+@@ -319,7 +376,7 @@ async fn test_invalid_addon_manifest_url_shows_actionable_error_and_preserves_st
  }
  
  #[test]
@@ -7310,7 +7312,7 @@ index 6f3eb39..9e63399 100644
      let raw_streams = vec![
          StreamItem {
              name: Some("HTTP 1080p Stream".to_string()),
-@@ -327,6 +382,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
+@@ -327,6 +384,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
              description: None,
              url: Some("https://example.test/stream1.mp4".to_string()),
              behavior_hints: None,
@@ -7318,7 +7320,7 @@ index 6f3eb39..9e63399 100644
          },
          StreamItem {
              name: Some("HTTP 720p Stream".to_string()),
-@@ -334,6 +390,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
+@@ -334,6 +392,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
              description: None,
              url: Some("http://example.test/stream2.mp4".to_string()),
              behavior_hints: None,
@@ -7326,7 +7328,7 @@ index 6f3eb39..9e63399 100644
          },
          StreamItem {
              name: Some("Magnet Link".to_string()),
-@@ -341,6 +398,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
+@@ -341,6 +400,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
              description: None,
              url: Some("magnet:?xt=urn:btih:d08244124e9f0863014f56947ab51404ec102770".to_string()),
              behavior_hints: None,
@@ -7334,7 +7336,7 @@ index 6f3eb39..9e63399 100644
          },
          StreamItem {
              name: Some("Local File".to_string()),
-@@ -348,6 +406,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
+@@ -348,6 +408,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
              description: None,
              url: Some("file:///etc/passwd".to_string()),
              behavior_hints: None,
@@ -7342,7 +7344,7 @@ index 6f3eb39..9e63399 100644
          },
          StreamItem {
              name: Some("FTP Stream".to_string()),
-@@ -355,6 +414,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
+@@ -355,6 +416,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
              description: None,
              url: Some("ftp://example.test/video.mkv".to_string()),
              behavior_hints: None,
@@ -7350,7 +7352,7 @@ index 6f3eb39..9e63399 100644
          },
          StreamItem {
              name: Some("Invalid".to_string()),
-@@ -362,6 +422,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
+@@ -362,6 +424,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
              description: None,
              url: Some("not-a-valid-url-string".to_string()),
              behavior_hints: None,
@@ -7358,7 +7360,7 @@ index 6f3eb39..9e63399 100644
          },
          StreamItem {
              name: Some("Empty".to_string()),
-@@ -369,6 +430,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
+@@ -369,6 +432,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
              description: None,
              url: None,
              behavior_hints: None,
@@ -7366,7 +7368,7 @@ index 6f3eb39..9e63399 100644
          },
      ];
  
-@@ -379,7 +441,9 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
+@@ -379,7 +443,9 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
          }
      }
  
@@ -7377,7 +7379,7 @@ index 6f3eb39..9e63399 100644
      assert_eq!(
          accepted_releases[0].mirrors[0].resolver_url,
          "https://example.test/stream1.mp4"
-@@ -388,6 +452,15 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
+@@ -388,6 +454,15 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
          accepted_releases[1].mirrors[0].resolver_url,
          "http://example.test/stream2.mp4"
      );
@@ -7393,7 +7395,7 @@ index 6f3eb39..9e63399 100644
  }
  
  #[tokio::test]
-@@ -424,3 +497,27 @@ async fn test_addon_enable_disable_and_removal_lifecycle() {
+@@ -424,3 +499,27 @@ async fn test_addon_enable_disable_and_removal_lifecycle() {
          .await;
      assert_eq!(app.state().installed_addons.len(), initial_count);
  }
