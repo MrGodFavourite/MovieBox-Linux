@@ -1,6 +1,6 @@
 diff -ruN a/Cargo.toml b/Cargo.toml
---- a/Cargo.toml	2026-11-21 18:33:40.815679845 +0000
-+++ b/Cargo.toml	2026-11-21 18:33:40.824632326 +0000
+--- a/Cargo.toml	2026-11-22 08:14:08.678572361 +0000
++++ b/Cargo.toml	2026-11-22 08:14:08.696094042 +0000
 @@ -60,6 +60,7 @@
  tar = "0.4.44"
  zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
@@ -10,8 +10,8 @@ diff -ruN a/Cargo.toml b/Cargo.toml
  [lib]
  name = "moviebox_tui"
 diff -ruN a/docs/addons-mode.md b/docs/addons-mode.md
---- a/docs/addons-mode.md	2026-11-21 18:33:40.815887721 +0000
-+++ b/docs/addons-mode.md	2026-11-21 18:33:40.820830774 +0000
+--- a/docs/addons-mode.md	2026-11-22 08:14:08.679399999 +0000
++++ b/docs/addons-mode.md	2026-11-22 08:14:08.692359217 +0000
 @@ -6,7 +6,7 @@
  
  - **Switch to Addons**: Press `Ctrl+P` on the home screen until `[Addons]` is selected.
@@ -65,27 +65,21 @@ diff -ruN a/docs/addons-mode.md b/docs/addons-mode.md
  
  Installed addons are saved to `addons_config.json` in your configuration directory:
 diff -ruN a/src/cache.rs b/src/cache.rs
---- a/src/cache.rs	2026-11-21 18:33:40.816155660 +0000
-+++ b/src/cache.rs	2026-11-21 18:33:40.821129069 +0000
-@@ -10,6 +10,17 @@
+--- a/src/cache.rs	2026-11-22 08:14:08.680766078 +0000
++++ b/src/cache.rs	2026-11-22 08:14:14.277499547 +0000
+@@ -10,6 +10,11 @@
  const CACHE_EXPIRY_SECS: u64 = 24 * 60 * 60;
  const STREAM_CACHE_EXPIRY_SECS: u64 = 2 * 60 * 60;
  const HOMEPAGE_CACHE_EXPIRY_SECS: u64 = 60 * 60;
-+/// Addon metadata (new seasons/episodes) and search results change often, so
-+/// they are kept only briefly instead of for a full day.
-+const ADDON_META_CACHE_EXPIRY_SECS: u64 = 10 * 60;
-+
-+fn details_expiry_secs(provider: ProviderKind) -> u64 {
-+    if provider == ProviderKind::Addons {
-+        ADDON_META_CACHE_EXPIRY_SECS
-+    } else {
-+        CACHE_EXPIRY_SECS
-+    }
++/// Details, search results and catalogs stay cached for 24 hours. Press `r`
++/// on the screen to bypass the cache and fetch fresh data.
++fn details_expiry_secs(_provider: ProviderKind) -> u64 {
++    CACHE_EXPIRY_SECS
 +}
  pub const CACHE_MAGIC: [u8; 4] = *b"MBC1";
  
  #[derive(Serialize, Deserialize)]
-@@ -231,6 +242,8 @@
+@@ -231,6 +236,8 @@
      let schema = match provider {
          ProviderKind::FourKHdHub => "v4_",
          ProviderKind::MovieBox => "v2_",
@@ -94,7 +88,7 @@ diff -ruN a/src/cache.rs b/src/cache.rs
          _ => "",
      };
      let hashed_id = md5_hex(subject_id);
-@@ -364,10 +377,11 @@
+@@ -364,10 +371,11 @@
  
  pub fn get_provider_details_path(provider: ProviderKind, subject_id: &str) -> PathBuf {
      let mut path = get_provider_cache_dir(provider, "details");
@@ -110,7 +104,7 @@ diff -ruN a/src/cache.rs b/src/cache.rs
      };
      let hashed_id = md5_hex(subject_id);
      path.push(format!("details_{schema}{hashed_id}.cache"));
-@@ -379,7 +393,7 @@
+@@ -379,7 +387,7 @@
      subject_id: &str,
  ) -> Option<MediaDetails> {
      let path = get_provider_details_path(provider, subject_id);
@@ -119,7 +113,7 @@ diff -ruN a/src/cache.rs b/src/cache.rs
  }
  
  pub fn set_provider_details_cache_typed(
-@@ -388,7 +402,7 @@
+@@ -388,7 +396,7 @@
      details: &MediaDetails,
  ) {
      let path = get_provider_details_path(provider, subject_id);
@@ -128,20 +122,20 @@ diff -ruN a/src/cache.rs b/src/cache.rs
  }
  
  pub fn invalidate_provider_details_cache(provider: ProviderKind, subject_id: &str) {
-@@ -399,7 +413,11 @@
+@@ -399,7 +407,11 @@
  pub fn get_provider_search_path(provider: ProviderKind, query: &str, page: usize) -> PathBuf {
      let mut path = get_provider_cache_dir(provider, "search");
      let hashed = md5_hex(query);
 -    path.push(format!("{hashed}_{page}.cache"));
 +    if provider == ProviderKind::Addons {
-+        path.push(format!("v2_{hashed}_{page}.cache"));
++        path.push(format!("v3_{hashed}_{page}.cache"));
 +    } else {
 +        path.push(format!("{hashed}_{page}.cache"));
 +    }
      path
  }
  
-@@ -409,7 +427,7 @@
+@@ -409,7 +421,7 @@
      page: usize,
  ) -> Option<Vec<CatalogItem>> {
      let path = get_provider_search_path(provider, query, page);
@@ -150,7 +144,7 @@ diff -ruN a/src/cache.rs b/src/cache.rs
      (!items.is_empty()).then_some(items)
  }
  
-@@ -423,7 +441,7 @@
+@@ -423,7 +435,7 @@
          return;
      }
      let path = get_provider_search_path(provider, query, page);
@@ -159,9 +153,21 @@ diff -ruN a/src/cache.rs b/src/cache.rs
  }
  
  pub fn get_homepage_path(tab_id: &str, page: usize) -> PathBuf {
+@@ -475,6 +487,11 @@
+     set_typed_cache(&path, HOMEPAGE_CACHE_EXPIRY_SECS, items);
+ }
+ 
++pub fn invalidate_addon_catalog_cache(manifest_url: &str, r_type: &str, catalog_id: &str) {
++    let path = get_addon_catalog_path(manifest_url, r_type, catalog_id);
++    let _ = fs::remove_file(path);
++}
++
+ pub fn get_addon_manifest_path(manifest_url: &str) -> PathBuf {
+     let mut path = get_provider_cache_dir(ProviderKind::Addons, "manifests");
+     let hashed = md5_hex(manifest_url);
 diff -ruN a/src/config.rs b/src/config.rs
---- a/src/config.rs	2026-11-21 18:33:40.816223735 +0000
-+++ b/src/config.rs	2026-11-21 18:33:40.821160484 +0000
+--- a/src/config.rs	2026-11-22 08:14:08.680856877 +0000
++++ b/src/config.rs	2026-11-22 08:14:08.693597663 +0000
 @@ -267,6 +267,49 @@
      Config::default()
  }
@@ -231,8 +237,8 @@ diff -ruN a/src/config.rs b/src/config.rs
  }
  
 diff -ruN a/src/download.rs b/src/download.rs
---- a/src/download.rs	2026-11-21 18:33:40.816252020 +0000
-+++ b/src/download.rs	2026-11-21 18:33:40.821179991 +0000
+--- a/src/download.rs	2026-11-22 08:14:08.680911769 +0000
++++ b/src/download.rs	2026-11-22 08:14:08.693614670 +0000
 @@ -173,13 +173,27 @@
  where
      F: FnMut(DownloadProgress),
@@ -263,8 +269,8 @@ diff -ruN a/src/download.rs b/src/download.rs
      for attempt in 1..=MAX_ATTEMPTS {
          let is_segmented_state = metadata.segments.is_some();
 diff -ruN a/src/lib.rs b/src/lib.rs
---- a/src/lib.rs	2026-11-21 18:33:40.816314463 +0000
-+++ b/src/lib.rs	2026-11-21 18:33:40.821207894 +0000
+--- a/src/lib.rs	2026-11-22 08:14:08.681062839 +0000
++++ b/src/lib.rs	2026-11-22 08:14:08.693636612 +0000
 @@ -10,5 +10,6 @@
  pub mod providers;
  pub mod proxy;
@@ -273,8 +279,8 @@ diff -ruN a/src/lib.rs b/src/lib.rs
  pub mod tui;
  pub mod updater;
 diff -ruN a/src/main.rs b/src/main.rs
---- a/src/main.rs	2026-11-21 18:33:40.816338144 +0000
-+++ b/src/main.rs	2026-11-21 18:33:40.821250665 +0000
+--- a/src/main.rs	2026-11-22 08:14:08.681135809 +0000
++++ b/src/main.rs	2026-11-22 08:14:08.693675643 +0000
 @@ -155,5 +155,6 @@
      if let Err(err) = app.run(&mut terminal).await {
          log::error!("application error: {err}");
@@ -283,8 +289,8 @@ diff -ruN a/src/main.rs b/src/main.rs
      Ok(())
  }
 diff -ruN a/src/models.rs b/src/models.rs
---- a/src/models.rs	2026-11-21 18:33:40.816349331 +0000
-+++ b/src/models.rs	2026-11-21 18:33:40.821273404 +0000
+--- a/src/models.rs	2026-11-22 08:14:08.681171579 +0000
++++ b/src/models.rs	2026-11-22 08:14:08.693723800 +0000
 @@ -183,6 +183,9 @@
      pub title: String,
      pub message: String,
@@ -321,8 +327,8 @@ diff -ruN a/src/models.rs b/src/models.rs
      }
  }
 diff -ruN a/src/player.rs b/src/player.rs
---- a/src/player.rs	2026-11-21 18:33:40.816378004 +0000
-+++ b/src/player.rs	2026-11-21 18:33:40.821288475 +0000
+--- a/src/player.rs	2026-11-22 08:14:08.681312391 +0000
++++ b/src/player.rs	2026-11-22 08:14:08.693738487 +0000
 @@ -477,6 +477,7 @@
      }
      command.arg(format!("{prefix}geometry=50%:50%"));
@@ -449,8 +455,8 @@ diff -ruN a/src/player.rs b/src/player.rs
  mod tests {
      use super::*;
 diff -ruN a/src/providers/addons/adapter.rs b/src/providers/addons/adapter.rs
---- a/src/providers/addons/adapter.rs	2026-11-21 18:33:40.816994933 +0000
-+++ b/src/providers/addons/adapter.rs	2026-11-21 18:33:40.821398838 +0000
+--- a/src/providers/addons/adapter.rs	2026-11-22 08:14:08.681638911 +0000
++++ b/src/providers/addons/adapter.rs	2026-11-22 08:14:08.693841318 +0000
 @@ -457,16 +457,114 @@
      None
  }
@@ -742,8 +748,8 @@ diff -ruN a/src/providers/addons/adapter.rs b/src/providers/addons/adapter.rs
          let item = MetaItem {
              id: "tt1234".to_string(),
 diff -ruN a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator.rs
---- a/src/providers/addons/aggregator.rs	2026-11-21 18:33:40.817015756 +0000
-+++ b/src/providers/addons/aggregator.rs	2026-11-21 18:33:40.821419370 +0000
+--- a/src/providers/addons/aggregator.rs	2026-11-22 08:14:08.681698678 +0000
++++ b/src/providers/addons/aggregator.rs	2026-11-22 08:14:08.693860690 +0000
 @@ -1,7 +1,12 @@
  use super::adapter::stream_item_to_release;
  use super::client::AddonClient;
@@ -1315,8 +1321,8 @@ diff -ruN a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator
 +    }
  }
 diff -ruN a/src/providers/addons/client.rs b/src/providers/addons/client.rs
---- a/src/providers/addons/client.rs	2026-11-21 18:33:40.817032056 +0000
-+++ b/src/providers/addons/client.rs	2026-11-21 18:33:40.821441652 +0000
+--- a/src/providers/addons/client.rs	2026-11-22 08:14:08.681737435 +0000
++++ b/src/providers/addons/client.rs	2026-11-22 08:14:08.693876228 +0000
 @@ -1,7 +1,14 @@
 -use super::models::{AddonManifest, MetaDetail, MetaItem, StreamItem};
 +use super::models::{
@@ -1728,8 +1734,8 @@ diff -ruN a/src/providers/addons/client.rs b/src/providers/addons/client.rs
 +    }
 +}
 diff -ruN a/src/providers/addons/mod.rs b/src/providers/addons/mod.rs
---- a/src/providers/addons/mod.rs	2026-11-21 18:33:40.817045787 +0000
-+++ b/src/providers/addons/mod.rs	2026-11-21 18:33:40.821460173 +0000
+--- a/src/providers/addons/mod.rs	2026-11-22 08:14:08.681775638 +0000
++++ b/src/providers/addons/mod.rs	2026-11-22 08:15:33.289435402 +0000
 @@ -2,12 +2,18 @@
  pub mod aggregator;
  pub mod client;
@@ -1750,7 +1756,90 @@ diff -ruN a/src/providers/addons/mod.rs b/src/providers/addons/mod.rs
  pub use client::AddonClient;
  pub use models::{AddonManifest, InstalledAddon, MetaDetail, MetaItem, StreamItem};
  
-@@ -111,42 +117,68 @@
+@@ -33,41 +39,59 @@
+         let addons = tokio::task::spawn_blocking(crate::config::load_addons)
+             .await
+             .unwrap_or_default();
+-        let catalog_addons: Vec<_> = addons
+-            .iter()
+-            .filter(|a| a.enabled && (a.provides_meta || a.provides_catalog))
+-            .collect();
++        let targets = search_targets(&addons);
+ 
+-        if catalog_addons.is_empty() {
++        if targets.is_empty() {
+             return Err(ProviderError::Unavailable(
+-                "No catalog/metadata addon enabled. Open /config to configure one.".to_string(),
++                "No searchable catalog addon enabled. Open /config to configure one.".to_string(),
+             ));
+         }
+ 
+-        let mut combined = Vec::new();
+-        for addon in catalog_addons {
+-            let base_url = Self::base_addon_url(&addon.manifest_url);
+-            let (movies_res, series_res) = tokio::join!(
+-                self.fetch_catalog_search(&base_url, "movie", "top", query),
+-                self.fetch_catalog_search(&base_url, "series", "top", query),
+-            );
+-            if let Ok(movies) = movies_res {
+-                combined.extend(movies);
+-            }
+-            if let Ok(series) = series_res {
+-                combined.extend(series);
+-            }
+-            if !combined.is_empty() {
+-                break;
++        // Ask every searchable catalog at once, using the catalog ids and types
++        // each addon declares (e.g. CNCVerse Bridge uses its own ids and the
++        // type "other"), so one slow or blocked addon cannot hide the others.
++        let lookups = targets.iter().map(move |target| async move {
++            let res = self
++                .fetch_catalog_search(
++                    &target.base_url,
++                    &target.r#type,
++                    &target.catalog_id,
++                    query,
++                )
++                .await;
++            (target.addon.as_str(), res)
++        });
++        let results = futures::future::join_all(lookups).await;
++
++        let mut combined: Vec<MetaItem> = Vec::new();
++        let mut failures: Vec<String> = Vec::new();
++        for (addon_name, res) in results {
++            match res {
++                Ok(items) => combined.extend(items),
++                Err(e) => {
++                    let msg = format!("{addon_name}: {e}");
++                    if !failures.contains(&msg) {
++                        failures.push(msg);
++                    }
++                }
+             }
+         }
+ 
+         let mut seen = std::collections::HashSet::new();
+-        Ok(combined
++        let items: Vec<CatalogItem> = combined
+             .into_iter()
+             .filter(|m| seen.insert(m.id.clone()))
+             .map(|m| adapter::meta_to_catalog_item(&m))
+-            .collect())
++            .collect();
++
++        if items.is_empty() && !failures.is_empty() {
++            let mut shown: Vec<String> = failures.iter().take(3).cloned().collect();
++            if failures.len() > 3 {
++                shown.push(format!("and {} more", failures.len() - 3));
++            }
++            return Err(ProviderError::Unavailable(shown.join("; ")));
++        }
++        Ok(items)
+     }
+ 
+     async fn details(&self, id: &str) -> Result<MediaDetails, ProviderError> {
+@@ -111,42 +135,68 @@
              vec!["series", "movie", "tv", "anime", "other"]
          };
  
@@ -1846,10 +1935,62 @@ diff -ruN a/src/providers/addons/mod.rs b/src/providers/addons/mod.rs
              let mut details = adapter::meta_detail_to_media_details(&d);
              if let Some(hint) = &type_hint {
                  details.id.value = format!("{hint}:{clean_id}");
-@@ -157,3 +189,38 @@
+@@ -157,3 +207,90 @@
          Err(ProviderError::NotFound)
      }
  }
++
++const MAX_SEARCH_TARGETS: usize = 40;
++
++struct SearchTarget {
++    addon: String,
++    base_url: String,
++    r#type: String,
++    catalog_id: String,
++}
++
++/// Catalogs worth searching: those an addon declares with a `search` extra.
++/// Cinemeta keeps its built-in `top` catalogs. Addons without a real
++/// searchable catalog are skipped instead of being sent made-up requests.
++fn search_targets(addons: &[InstalledAddon]) -> Vec<SearchTarget> {
++    let mut targets: Vec<SearchTarget> = Vec::new();
++    for addon in addons.iter().filter(|a| a.enabled) {
++        let base_url = AddonClient::base_addon_url(&addon.manifest_url);
++        let mut wanted: Vec<(String, String)> = Vec::new();
++        for cat in &addon.catalogs {
++            if cat.r#type.trim().is_empty() || cat.id.trim().is_empty() {
++                continue;
++            }
++            if cat
++                .extra
++                .iter()
++                .any(|e| e.name.eq_ignore_ascii_case("search"))
++            {
++                wanted.push((cat.r#type.clone(), cat.id.clone()));
++            }
++        }
++        if wanted.is_empty() && addon.is_core() {
++            wanted.push(("movie".to_string(), "top".to_string()));
++            wanted.push(("series".to_string(), "top".to_string()));
++        }
++        for (r#type, catalog_id) in wanted {
++            let duplicate = targets.iter().any(|t| {
++                t.base_url == base_url
++                    && t.r#type.eq_ignore_ascii_case(&r#type)
++                    && t.catalog_id == catalog_id
++            });
++            if !duplicate && targets.len() < MAX_SEARCH_TARGETS {
++                targets.push(SearchTarget {
++                    addon: addon.name.clone(),
++                    base_url: base_url.clone(),
++                    r#type,
++                    catalog_id,
++                });
++            }
++        }
++    }
++    targets
++}
 +
 +fn video_key(v: &models::MetaVideo) -> (usize, usize) {
 +    (
@@ -1886,8 +2027,8 @@ diff -ruN a/src/providers/addons/mod.rs b/src/providers/addons/mod.rs
 +    }
 +}
 diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
---- a/src/providers/addons/models.rs	2026-11-21 18:33:40.817059128 +0000
-+++ b/src/providers/addons/models.rs	2026-11-21 18:33:40.821475526 +0000
+--- a/src/providers/addons/models.rs	2026-11-22 08:14:08.681881313 +0000
++++ b/src/providers/addons/models.rs	2026-11-22 08:14:14.277676637 +0000
 @@ -130,6 +130,27 @@
      deserializer.deserialize_any(StringOrNumberVisitor)
  }
@@ -2068,11 +2209,11 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
      let enabled_catalogs: Vec<&InstalledAddon> = addons
          .iter()
 -        .filter(|a| a.enabled && a.provides_catalog)
-+        .filter(|a| a.enabled && (a.provides_catalog || !a.catalogs.is_empty()))
++        .filter(|a| a.enabled && (a.is_core() || !a.catalogs.is_empty()))
          .collect();
  
      let multi = enabled_catalogs.len() > 1;
-@@ -506,13 +617,36 @@
+@@ -506,13 +617,43 @@
              String::new()
          };
  
@@ -2099,6 +2240,13 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
 +            continue;
 +        }
 +
++        // Only Cinemeta has a built-in "top" catalog. Any other addon is listed
++        // only for catalogs its manifest really declares; inventing a "top"
++        // catalog for it makes hosts answer 403/404.
++        if !addon.is_core() {
++            continue;
++        }
++
          let has_movies =
              addon.types.is_empty() || addon.types.iter().any(|t| t.eq_ignore_ascii_case("movie"));
          let has_series =
@@ -2110,7 +2258,7 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
                  label: format!("Top Movies{suffix}"),
                  addon_name: addon.name.clone(),
                  manifest_url: addon.manifest_url.clone(),
-@@ -521,7 +655,7 @@
+@@ -521,7 +662,7 @@
              });
          }
          if has_series {
@@ -2119,7 +2267,7 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
                  label: format!("Top Series{suffix}"),
                  addon_name: addon.name.clone(),
                  manifest_url: addon.manifest_url.clone(),
-@@ -530,7 +664,7 @@
+@@ -530,7 +671,7 @@
              });
          }
          if has_movies && addon.is_core() {
@@ -2128,7 +2276,7 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
                  label: format!("Top Rated Movies{suffix}"),
                  addon_name: addon.name.clone(),
                  manifest_url: addon.manifest_url.clone(),
-@@ -539,7 +673,7 @@
+@@ -539,7 +680,7 @@
              });
          }
          if has_series && addon.is_core() {
@@ -2137,7 +2285,7 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
                  label: format!("Top Rated Series{suffix}"),
                  addon_name: addon.name.clone(),
                  manifest_url: addon.manifest_url.clone(),
-@@ -547,7 +681,7 @@
+@@ -547,7 +688,7 @@
                  catalog_id: "imdbRating".to_string(),
              });
          }
@@ -2146,7 +2294,7 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
              break;
          }
      }
-@@ -584,6 +718,33 @@
+@@ -584,6 +725,33 @@
          });
      }
  
@@ -2183,7 +2331,7 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
 +}
 diff -ruN a/src/providers/addons/nuvio.rs b/src/providers/addons/nuvio.rs
 --- a/src/providers/addons/nuvio.rs	1970-01-01 00:00:00.000000000 +0000
-+++ b/src/providers/addons/nuvio.rs	2026-11-21 18:33:40.821991461 +0000
++++ b/src/providers/addons/nuvio.rs	2026-11-22 08:14:08.693915985 +0000
 @@ -0,0 +1,862 @@
 +//! Nuvio plugin support.
 +//!
@@ -3049,7 +3197,7 @@ diff -ruN a/src/providers/addons/nuvio.rs b/src/providers/addons/nuvio.rs
 +}
 diff -ruN a/src/providers/addons/nuvio_runner.cjs b/src/providers/addons/nuvio_runner.cjs
 --- a/src/providers/addons/nuvio_runner.cjs	1970-01-01 00:00:00.000000000 +0000
-+++ b/src/providers/addons/nuvio_runner.cjs	2026-11-21 18:33:40.822019515 +0000
++++ b/src/providers/addons/nuvio_runner.cjs	2026-11-22 08:14:08.693933197 +0000
 @@ -0,0 +1,186 @@
 +'use strict';
 +// Runs one Nuvio scraper (a JavaScript file exposing getStreams) and prints
@@ -3239,7 +3387,7 @@ diff -ruN a/src/providers/addons/nuvio_runner.cjs b/src/providers/addons/nuvio_r
 +main().catch((e) => finish({ error: String(e && e.message ? e.message : e) }, 1));
 diff -ruN a/src/providers/addons/torrent.rs b/src/providers/addons/torrent.rs
 --- a/src/providers/addons/torrent.rs	1970-01-01 00:00:00.000000000 +0000
-+++ b/src/providers/addons/torrent.rs	2026-11-21 18:33:40.822037095 +0000
++++ b/src/providers/addons/torrent.rs	2026-11-22 08:14:08.693963481 +0000
 @@ -0,0 +1,503 @@
 +//! Torrent helpers for addon streams: smart file selection, peer-source hints
 +//! and lazy preparation of the built-in torrent engine (`crate::torrent_engine`).
@@ -3745,8 +3893,8 @@ diff -ruN a/src/providers/addons/torrent.rs b/src/providers/addons/torrent.rs
 +    }
 +}
 diff -ruN a/src/service.rs b/src/service.rs
---- a/src/service.rs	2026-11-21 18:33:40.817683494 +0000
-+++ b/src/service.rs	2026-11-21 18:33:40.823760030 +0000
+--- a/src/service.rs	2026-11-22 08:14:08.683963611 +0000
++++ b/src/service.rs	2026-11-22 08:14:08.695730248 +0000
 @@ -137,6 +137,59 @@
          Ok(items)
      }
@@ -3809,7 +3957,7 @@ diff -ruN a/src/service.rs b/src/service.rs
          provider: ProviderKind,
 diff -ruN a/src/torrent_engine.rs b/src/torrent_engine.rs
 --- a/src/torrent_engine.rs	1970-01-01 00:00:00.000000000 +0000
-+++ b/src/torrent_engine.rs	2026-11-21 18:33:40.822741384 +0000
++++ b/src/torrent_engine.rs	2026-11-22 08:14:08.694436158 +0000
 @@ -0,0 +1,756 @@
 +//! Built-in torrent engine.
 +//!
@@ -4568,8 +4716,8 @@ diff -ruN a/src/torrent_engine.rs b/src/torrent_engine.rs
 +    }
 +}
 diff -ruN a/src/tui/action.rs b/src/tui/action.rs
---- a/src/tui/action.rs	2026-11-21 18:33:40.817721227 +0000
-+++ b/src/tui/action.rs	2026-11-21 18:33:40.823627085 +0000
+--- a/src/tui/action.rs	2026-11-22 08:14:08.684027786 +0000
++++ b/src/tui/action.rs	2026-11-22 08:14:08.695326250 +0000
 @@ -118,6 +118,25 @@
          usize,
          Vec<crate::providers::models::Release>,
@@ -4597,8 +4745,8 @@ diff -ruN a/src/tui/action.rs b/src/tui/action.rs
          crate::providers::models::RequestContext,
          u64,
 diff -ruN a/src/tui/app/addons.rs b/src/tui/app/addons.rs
---- a/src/tui/app/addons.rs	2026-11-21 18:33:40.817759617 +0000
-+++ b/src/tui/app/addons.rs	2026-11-21 18:33:40.822814600 +0000
+--- a/src/tui/app/addons.rs	2026-11-22 08:14:08.684108571 +0000
++++ b/src/tui/app/addons.rs	2026-11-22 08:14:08.694491221 +0000
 @@ -41,6 +41,37 @@
                  let sender = self.action_sender.clone();
  
@@ -4675,8 +4823,8 @@ diff -ruN a/src/tui/app/addons.rs b/src/tui/app/addons.rs
                              sender
                                  .send(Action::SetStatus(format!(
 diff -ruN a/src/tui/app/download.rs b/src/tui/app/download.rs
---- a/src/tui/app/download.rs	2026-11-21 18:33:40.817776712 +0000
-+++ b/src/tui/app/download.rs	2026-11-21 18:33:40.822831591 +0000
+--- a/src/tui/app/download.rs	2026-11-22 08:14:08.684310771 +0000
++++ b/src/tui/app/download.rs	2026-11-22 08:14:08.694503384 +0000
 @@ -583,10 +583,23 @@
                          {
                              let sender_clone = self.action_sender.clone();
@@ -4703,8 +4851,8 @@ diff -ruN a/src/tui/app/download.rs b/src/tui/app/download.rs
                                      max_height,
                                  ))
 diff -ruN a/src/tui/app/favorites.rs b/src/tui/app/favorites.rs
---- a/src/tui/app/favorites.rs	2026-11-21 18:33:40.817809747 +0000
-+++ b/src/tui/app/favorites.rs	2026-11-21 18:33:40.822861510 +0000
+--- a/src/tui/app/favorites.rs	2026-11-22 08:14:08.684359911 +0000
++++ b/src/tui/app/favorites.rs	2026-11-22 08:14:08.694620144 +0000
 @@ -154,6 +154,8 @@
              self.state.search_preview.as_ref(),
          ));
@@ -4724,8 +4872,8 @@ diff -ruN a/src/tui/app/favorites.rs b/src/tui/app/favorites.rs
          self.state.is_fetching_streams = false;
          self.state.stream_error = None;
 diff -ruN a/src/tui/app/keyboard.rs b/src/tui/app/keyboard.rs
---- a/src/tui/app/keyboard.rs	2026-11-21 18:33:40.817823922 +0000
-+++ b/src/tui/app/keyboard.rs	2026-11-21 18:33:40.822877039 +0000
+--- a/src/tui/app/keyboard.rs	2026-11-22 08:14:08.684529477 +0000
++++ b/src/tui/app/keyboard.rs	2026-11-22 08:14:08.694637123 +0000
 @@ -82,6 +82,33 @@
              }
          }
@@ -4802,8 +4950,8 @@ diff -ruN a/src/tui/app/keyboard.rs b/src/tui/app/keyboard.rs
                              self.action_sender.send(Action::ToggleHelp).ok();
                          }
 diff -ruN a/src/tui/app/mouse.rs b/src/tui/app/mouse.rs
---- a/src/tui/app/mouse.rs	2026-11-21 18:33:40.817874439 +0000
-+++ b/src/tui/app/mouse.rs	2026-11-21 18:33:40.822910393 +0000
+--- a/src/tui/app/mouse.rs	2026-11-22 08:14:08.684970906 +0000
++++ b/src/tui/app/mouse.rs	2026-11-22 08:14:08.694668495 +0000
 @@ -1128,11 +1128,38 @@
  
          if streams_area.contains(ratatui::layout::Position::new(col, row)) {
@@ -4875,8 +5023,8 @@ diff -ruN a/src/tui/app/mouse.rs b/src/tui/app/mouse.rs
                          self.action_sender.send(Action::TabPane).ok();
                      }
 diff -ruN a/src/tui/app/navigation.rs b/src/tui/app/navigation.rs
---- a/src/tui/app/navigation.rs	2026-11-21 18:33:40.817905975 +0000
-+++ b/src/tui/app/navigation.rs	2026-11-21 18:33:40.822957275 +0000
+--- a/src/tui/app/navigation.rs	2026-11-22 08:14:08.685161205 +0000
++++ b/src/tui/app/navigation.rs	2026-11-22 08:14:08.694701843 +0000
 @@ -117,7 +117,6 @@
              || self.state.is_loading
              || self.state.search_results.is_empty()
@@ -5032,8 +5180,8 @@ diff -ruN a/src/tui/app/navigation.rs b/src/tui/app/navigation.rs
              self.state.is_fetching_streams = false;
              self.state.stream_error = None;
 diff -ruN a/src/tui/app/playback.rs b/src/tui/app/playback.rs
---- a/src/tui/app/playback.rs	2026-11-21 18:33:40.817932166 +0000
-+++ b/src/tui/app/playback.rs	2026-11-21 18:33:40.822984059 +0000
+--- a/src/tui/app/playback.rs	2026-11-22 08:14:08.685229386 +0000
++++ b/src/tui/app/playback.rs	2026-11-22 08:14:08.694723947 +0000
 @@ -16,6 +16,63 @@
      NoPlayersInstalled,
  }
@@ -5332,9 +5480,31 @@ diff -ruN a/src/tui/app/playback.rs b/src/tui/app/playback.rs
 +    }
  }
 diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
---- a/src/tui/app/requests.rs	2026-11-21 18:33:40.817969217 +0000
-+++ b/src/tui/app/requests.rs	2026-11-21 18:33:40.823022464 +0000
-@@ -416,9 +416,13 @@
+--- a/src/tui/app/requests.rs	2026-11-22 08:14:08.685325735 +0000
++++ b/src/tui/app/requests.rs	2026-11-22 08:15:10.679735498 +0000
+@@ -257,6 +257,7 @@
+                 let manifest_url = target.manifest_url.clone();
+                 let r_type = target.r#type.clone();
+                 let cat_id = target.catalog_id.clone();
++                let addon_name = target.addon_name.clone();
+                 self.request_tasks.spawn_search(async move {
+                     let result = service
+                         .fetch_addon_catalog(&manifest_url, &r_type, &cat_id)
+@@ -275,7 +276,12 @@
+                         }
+                         Err(error) => {
+                             sender
+-                                .send(Action::SearchFailure(context, request_id, 1, error))
++                                .send(Action::SearchFailure(
++                                    context,
++                                    request_id,
++                                    1,
++                                    format!("{addon_name}: {error}"),
++                                ))
+                                 .ok();
+                         }
+                     }
+@@ -416,9 +422,13 @@
  
                  if page <= 1 {
                      self.state.search_results = new_results;
@@ -5350,7 +5520,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                      self.state.search_results.extend(new_results);
                  }
                  if let Some(prev_id) = previous_selected_id {
-@@ -442,10 +446,21 @@
+@@ -442,10 +452,21 @@
  
                  self.state
                      .set_status_default(if self.state.search_results.is_empty() {
@@ -5375,7 +5545,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                          )
                      } else {
                          format!(
-@@ -635,7 +650,9 @@
+@@ -635,7 +656,9 @@
                      self.state.poster_protocol = None;
                      return None;
                  }
@@ -5386,7 +5556,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                      self.state.preview_loading = false;
                      self.state.search_preview = Some(cached.clone());
                      self.state.poster_image = None;
-@@ -1230,6 +1247,8 @@
+@@ -1230,6 +1253,8 @@
                  self.state.is_fetching_streams = true;
                  self.state.has_streams_settled = false;
                  self.state.selected_resources.clear();
@@ -5395,7 +5565,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                  self.state.stream_error = None;
  
                  if force_refresh {
-@@ -1297,34 +1316,99 @@
+@@ -1297,34 +1322,99 @@
                              return;
                          }
  
@@ -5466,15 +5636,15 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
 +                                .join(", ")
 +                        });
 +                        if let Some(detail) = &failure_detail {
-                             sender
-                                 .send(Action::SetStatus(format!(
--                                    "Warning: Blocked {} torrent streams. HTTP only.",
++                            sender
++                                .send(Action::SetStatus(format!(
 +                                    "Warning: no streams from {detail}. Press 'r' to retry."
 +                                )))
 +                                .ok();
 +                        } else if !blocked_addons.is_empty() {
-+                            sender
-+                                .send(Action::SetStatus(format!(
+                             sender
+                                 .send(Action::SetStatus(format!(
+-                                    "Warning: Blocked {} torrent streams. HTTP only.",
 +                                    "Warning: {} returned no playable streams.",
                                      blocked_addons.join(", ")
                                  )))
@@ -5514,7 +5684,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
  
                              sender
                                  .send(Action::EpisodeStreamsReady(
-@@ -1339,7 +1423,12 @@
+@@ -1339,7 +1429,12 @@
                                      id,
                                      season,
                                      episode,
@@ -5528,7 +5698,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                                  ))
                                  .ok();
                          }
-@@ -1566,11 +1655,21 @@
+@@ -1566,11 +1661,21 @@
                                  } else {
                                      !link.is_empty() && link == i_link
                                  };
@@ -5553,7 +5723,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                                          i.mirrors = item.mirrors.clone();
                                      }
                                      exists = true;
-@@ -1604,10 +1703,12 @@
+@@ -1604,10 +1709,12 @@
                  }
  
                  let mut filtered = raw_list;
@@ -5568,7 +5738,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                      if let Some(subject_id) = &self.state.active_subject_id {
                          let id_clone = subject_id.clone();
                          let filtered_clone = filtered.clone();
-@@ -1623,12 +1724,21 @@
+@@ -1623,12 +1730,21 @@
                      }
                  }
  
@@ -5591,7 +5761,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                      let saved_stream = self
                          .state
                          .active_subject_id
-@@ -1647,8 +1757,7 @@
+@@ -1647,8 +1763,7 @@
                          })
                          .and_then(|item| item.stream_filename.as_deref());
                      if let Some(target_file) = saved_stream {
@@ -5601,7 +5771,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                              .iter()
                              .position(|r| r.filename == target_file)
                              .or(Some(0))
-@@ -1658,6 +1767,9 @@
+@@ -1658,6 +1773,9 @@
                  } else {
                      None
                  };
@@ -5611,7 +5781,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                  self.state.resource_list_state.select(preferred_stream_idx);
                  self.state
                      .set_status_default(format!("{} streams available.", count));
-@@ -1746,6 +1858,87 @@
+@@ -1746,6 +1864,87 @@
                  }
              }
  
@@ -5700,8 +5870,8 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                  context,
                  request_id,
 diff -ruN a/src/tui/app/run.rs b/src/tui/app/run.rs
---- a/src/tui/app/run.rs	2026-11-21 18:33:40.818000577 +0000
-+++ b/src/tui/app/run.rs	2026-11-21 18:33:40.823059298 +0000
+--- a/src/tui/app/run.rs	2026-11-22 08:14:08.685396219 +0000
++++ b/src/tui/app/run.rs	2026-11-22 08:14:08.694800508 +0000
 @@ -462,6 +462,8 @@
              | Action::PreviewFailure(..)
              | Action::FetchEpisodeStreams { .. }
@@ -5712,8 +5882,8 @@ diff -ruN a/src/tui/app/run.rs b/src/tui/app/run.rs
              | Action::InitStreamPool(..)
              | Action::StreamPoolInitialized(..)
 diff -ruN a/src/tui/app/search.rs b/src/tui/app/search.rs
---- a/src/tui/app/search.rs	2026-11-21 18:33:40.818031424 +0000
-+++ b/src/tui/app/search.rs	2026-11-21 18:33:40.823090519 +0000
+--- a/src/tui/app/search.rs	2026-11-22 08:14:08.685452692 +0000
++++ b/src/tui/app/search.rs	2026-11-22 08:14:08.694820296 +0000
 @@ -156,7 +156,50 @@
                          format!("Available in Streaming Mode ({ctrl_s})."),
                      );
@@ -5801,8 +5971,8 @@ diff -ruN a/src/tui/app/search.rs b/src/tui/app/search.rs
                  self.action_sender
                      .send(Action::DetailsSuccess(
 diff -ruN a/src/tui/app/system.rs b/src/tui/app/system.rs
---- a/src/tui/app/system.rs	2026-11-21 18:33:40.818048723 +0000
-+++ b/src/tui/app/system.rs	2026-11-21 18:33:40.823109699 +0000
+--- a/src/tui/app/system.rs	2026-11-22 08:14:08.685512235 +0000
++++ b/src/tui/app/system.rs	2026-11-22 08:15:10.680318157 +0000
 @@ -8,6 +8,7 @@
                  let mut needs_redraw = (self.state.is_loading && self.state.tick_count % 5 == 0)
                      || self.state.tick_count < 15;
@@ -5823,9 +5993,22 @@ diff -ruN a/src/tui/app/system.rs b/src/tui/app/system.rs
                                  let preferred_stream_idx = if count > 0 {
                                      let provider_key =
                                          self.provider_for_subject(&subject_id).cache_key();
+@@ -184,6 +189,12 @@
+                             .send(Action::FetchHomepage { tab_id, page: 1 })
+                             .ok();
+                     } else if let Some(catalog) = self.state.active_addon_catalog.clone() {
++                        // `r` means "fetch it again": drop the cached copy first.
++                        crate::cache::invalidate_addon_catalog_cache(
++                            &catalog.manifest_url,
++                            &catalog.r#type,
++                            &catalog.catalog_id,
++                        );
+                         self.action_sender
+                             .send(Action::SelectAddonCatalog(catalog))
+                             .ok();
 diff -ruN a/src/tui/commands.rs b/src/tui/commands.rs
---- a/src/tui/commands.rs	2026-11-21 18:33:40.818080057 +0000
-+++ b/src/tui/commands.rs	2026-11-21 18:33:40.823152011 +0000
+--- a/src/tui/commands.rs	2026-11-22 08:14:08.685615234 +0000
++++ b/src/tui/commands.rs	2026-11-22 08:14:08.694872480 +0000
 @@ -77,6 +77,33 @@
          let lower = query.to_ascii_lowercase();
          let mut results = Vec::new();
@@ -5872,8 +6055,8 @@ diff -ruN a/src/tui/commands.rs b/src/tui/commands.rs
              "/settings" => Some(Self::Settings.description(state)),
              "/config" => Some(Self::Config.description(state)),
 diff -ruN a/src/tui/overlay.rs b/src/tui/overlay.rs
---- a/src/tui/overlay.rs	2026-11-21 18:33:40.818115851 +0000
-+++ b/src/tui/overlay.rs	2026-11-21 18:33:40.823168447 +0000
+--- a/src/tui/overlay.rs	2026-11-22 08:14:08.685730125 +0000
++++ b/src/tui/overlay.rs	2026-11-22 08:14:08.694885724 +0000
 @@ -557,6 +557,22 @@
      cards
  }
@@ -5950,8 +6133,8 @@ diff -ruN a/src/tui/overlay.rs b/src/tui/overlay.rs
  
          let block = Block::default()
 diff -ruN a/src/tui/screens/details.rs b/src/tui/screens/details.rs
---- a/src/tui/screens/details.rs	2026-11-21 18:33:40.818146263 +0000
-+++ b/src/tui/screens/details.rs	2026-11-21 18:33:40.823233626 +0000
+--- a/src/tui/screens/details.rs	2026-11-22 08:14:08.685813749 +0000
++++ b/src/tui/screens/details.rs	2026-11-22 08:14:08.694963599 +0000
 @@ -10,7 +10,7 @@
  use ratatui::{
      Frame,
@@ -6477,8 +6660,8 @@ diff -ruN a/src/tui/screens/details.rs b/src/tui/screens/details.rs
 +    }
  }
 diff -ruN a/src/tui/screens/home.rs b/src/tui/screens/home.rs
---- a/src/tui/screens/home.rs	2026-11-21 18:33:40.818205220 +0000
-+++ b/src/tui/screens/home.rs	2026-11-21 18:33:40.823300800 +0000
+--- a/src/tui/screens/home.rs	2026-11-22 08:14:08.686169834 +0000
++++ b/src/tui/screens/home.rs	2026-11-22 08:14:08.695031463 +0000
 @@ -3101,6 +3101,7 @@
                      provides_stream: false,
                      id_prefixes: vec![],
@@ -6504,8 +6687,8 @@ diff -ruN a/src/tui/screens/home.rs b/src/tui/screens/home.rs
              ],
              addon_manager_selected: 2,
 diff -ruN a/src/tui/state.rs b/src/tui/state.rs
---- a/src/tui/state.rs	2026-11-21 18:33:40.818248522 +0000
-+++ b/src/tui/state.rs	2026-11-21 18:33:40.823365495 +0000
+--- a/src/tui/state.rs	2026-11-22 08:14:08.686306257 +0000
++++ b/src/tui/state.rs	2026-11-22 08:14:08.695083319 +0000
 @@ -182,6 +182,8 @@
      pub selected_details: Option<MediaDetails>,
      pub active_subject_id: Option<String>,
@@ -6799,8 +6982,8 @@ diff -ruN a/src/tui/state.rs b/src/tui/state.rs
 +    }
  }
 diff -ruN a/tests/addons_manifest.rs b/tests/addons_manifest.rs
---- a/tests/addons_manifest.rs	2026-11-21 18:33:40.818567300 +0000
-+++ b/tests/addons_manifest.rs	2026-11-21 18:33:40.823800426 +0000
+--- a/tests/addons_manifest.rs	2026-11-22 08:14:08.687754838 +0000
++++ b/tests/addons_manifest.rs	2026-11-22 08:15:21.321436950 +0000
 @@ -117,6 +117,7 @@
              description: None,
              url: Some("https://cdn.example.com/s01e08_1080p.mp4".to_string()),
@@ -7001,3 +7184,31 @@ diff -ruN a/tests/addons_manifest.rs b/tests/addons_manifest.rs
  }
  
  #[tokio::test]
+@@ -424,3 +497,27 @@
+         .await;
+     assert_eq!(app.state().installed_addons.len(), initial_count);
+ }
++
++#[test]
++fn test_curated_catalog_presets_skips_stream_only_addons_without_catalogs() {
++    use moviebox_tui::providers::addons::models::{AddonManifest, curated_catalog_presets};
++
++    let raw_manifest = r#"{
++        "id": "org.stream.only",
++        "name": "HdHub",
++        "version": "1.0.0",
++        "resources": ["catalog", "stream"],
++        "types": ["movie", "series"],
++        "catalogs": []
++    }"#;
++    let manifest: AddonManifest = serde_json::from_str(raw_manifest).unwrap();
++    let hdhub = InstalledAddon::from_manifest(
++        "https://hdhub.example.com/manifest.json".to_string(),
++        &manifest,
++    );
++
++    let addons = vec![InstalledAddon::cinemeta_default(), hdhub];
++    let presets = curated_catalog_presets(&addons);
++    assert!(!presets.iter().any(|p| p.addon_name == "HdHub"));
++    assert!(presets.iter().any(|p| p.addon_name == "Cinemeta"));
++}
