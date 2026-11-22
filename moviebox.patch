@@ -1,7 +1,8 @@
-diff -ruN a/Cargo.toml b/Cargo.toml
---- a/Cargo.toml	2026-11-22 08:14:08.678572361 +0000
-+++ b/Cargo.toml	2026-11-22 08:14:08.696094042 +0000
-@@ -60,6 +60,7 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index cd429d8..58f411d 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -60,6 +60,7 @@ flate2 = "1.0.35"
  tar = "0.4.44"
  zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
  tempfile = "3.17.1"
@@ -9,10 +10,11 @@ diff -ruN a/Cargo.toml b/Cargo.toml
  
  [lib]
  name = "moviebox_tui"
-diff -ruN a/docs/addons-mode.md b/docs/addons-mode.md
---- a/docs/addons-mode.md	2026-11-22 08:14:08.679399999 +0000
-+++ b/docs/addons-mode.md	2026-11-22 08:14:08.692359217 +0000
-@@ -6,7 +6,7 @@
+diff --git a/docs/addons-mode.md b/docs/addons-mode.md
+index 63c8e56..5814fec 100644
+--- a/docs/addons-mode.md
++++ b/docs/addons-mode.md
+@@ -6,7 +6,7 @@ MovieBox-TUI supports Stremio HTTP addons. You can install standard addon manife
  
  - **Switch to Addons**: Press `Ctrl+P` on the home screen until `[Addons]` is selected.
  - **Open Addon Manager**: Type `/config` or click `[Addons]` in the search bar.
@@ -21,7 +23,7 @@ diff -ruN a/docs/addons-mode.md b/docs/addons-mode.md
  - **Search**: Type in the search bar to search titles across installed addons.
  
  ## Addon Manager
-@@ -21,9 +21,42 @@
+@@ -21,9 +21,42 @@ The Addon Manager lets you add, enable, or remove addon manifests:
  ## Supported Streams
  
  - Streams are parsed and labeled with quality tags (`4K`, `1080p`, `720p`), codec, and file size.
@@ -41,7 +43,7 @@ diff -ruN a/docs/addons-mode.md b/docs/addons-mode.md
 +- Only the selected file is downloaded, and torrent downloads use a single sequential stream so piece priority stays at the read head.
 +- **Accepts incoming peers.** The engine listens on port 4240 (next free port up to +19; change the start with `MOVIEBOX_TORRENT_LISTEN_PORT`) and asks your router for a UPnP mapping, like Stremio does. Allow that port in your firewall for the best speeds. `MOVIEBOX_TORRENT_NO_LISTEN=1` turns this off and `MOVIEBOX_TORRENT_NO_UTP=1` limits it to TCP.
 +- **Season packs.** Playing another episode of a torrent you already opened works without a restart.
-+- **Ranked by seeds, then quality.** Torrent releases are grouped by swarm health: 30+ seeders (or no seeder count, such as direct HTTP streams) first, then 5–29, then 1–4, then 0. Inside each group the better quality comes first (2160p, 1080p, 720p, 480p), then more seeders. A healthy 1080p therefore lists above a nearly dead 2160p. CAM, telesync and screener rips always go last. The seeder count is shown in the source label, for example `Torrentio · Torrent · 128 seeds`.
++- **Ranked by quality, then HTTPS URLs, then torrent health.** Streams are grouped by resolution first (2160p/4K, 1440p, 1080p, 720p, 480p, 360p). Inside each quality bracket, direct HTTPS URLs come first, then plain HTTP URLs, then good torrents (30+ seeders, then 5–29), then unknown-seeder torrents, then bad torrents (1–4 seeders, then 0). CAM, telesync and screener rips always go last. The seeder count is shown in the source label, for example `Torrentio · Torrent · 128 seeds`.
 +- **"Torrent running" notification.** From the moment you press play on a torrent, a notification stays on screen with live peers, seeders, download speed and the amount downloaded. It does not time out. It disappears when the player starts reading video, or when the start is cancelled or fails. Press `Esc` while it shows "Finding peers" to cancel the start.
 +- Downloads (`/downloads`) of torrent releases go through the same engine.
 +- Addons get up to 22 seconds (with one retry) to answer, and an unreadable stream entry is skipped instead of hiding the addon's other results.
@@ -64,10 +66,11 @@ diff -ruN a/docs/addons-mode.md b/docs/addons-mode.md
  ## Storage
  
  Installed addons are saved to `addons_config.json` in your configuration directory:
-diff -ruN a/src/cache.rs b/src/cache.rs
---- a/src/cache.rs	2026-11-22 08:14:08.680766078 +0000
-+++ b/src/cache.rs	2026-11-22 08:14:14.277499547 +0000
-@@ -10,6 +10,11 @@
+diff --git a/src/cache.rs b/src/cache.rs
+index 2b27e09..e24929d 100644
+--- a/src/cache.rs
++++ b/src/cache.rs
+@@ -10,6 +10,11 @@ use std::path::{Path, PathBuf};
  const CACHE_EXPIRY_SECS: u64 = 24 * 60 * 60;
  const STREAM_CACHE_EXPIRY_SECS: u64 = 2 * 60 * 60;
  const HOMEPAGE_CACHE_EXPIRY_SECS: u64 = 60 * 60;
@@ -79,16 +82,16 @@ diff -ruN a/src/cache.rs b/src/cache.rs
  pub const CACHE_MAGIC: [u8; 4] = *b"MBC1";
  
  #[derive(Serialize, Deserialize)]
-@@ -231,6 +236,8 @@
+@@ -231,6 +236,8 @@ pub fn get_provider_stream_path(
      let schema = match provider {
          ProviderKind::FourKHdHub => "v4_",
          ProviderKind::MovieBox => "v2_",
 +        // Discard addon streams cached before torrent streams were supported.
-+        ProviderKind::Addons => "v2_",
++        ProviderKind::Addons => "v3_",
          _ => "",
      };
      let hashed_id = md5_hex(subject_id);
-@@ -364,10 +371,11 @@
+@@ -364,10 +371,11 @@ pub fn invalidate_provider_stream_cache(
  
  pub fn get_provider_details_path(provider: ProviderKind, subject_id: &str) -> PathBuf {
      let mut path = get_provider_cache_dir(provider, "details");
@@ -104,7 +107,7 @@ diff -ruN a/src/cache.rs b/src/cache.rs
      };
      let hashed_id = md5_hex(subject_id);
      path.push(format!("details_{schema}{hashed_id}.cache"));
-@@ -379,7 +387,7 @@
+@@ -379,7 +387,7 @@ pub fn get_provider_details_cache_typed(
      subject_id: &str,
  ) -> Option<MediaDetails> {
      let path = get_provider_details_path(provider, subject_id);
@@ -113,7 +116,7 @@ diff -ruN a/src/cache.rs b/src/cache.rs
  }
  
  pub fn set_provider_details_cache_typed(
-@@ -388,7 +396,7 @@
+@@ -388,7 +396,7 @@ pub fn set_provider_details_cache_typed(
      details: &MediaDetails,
  ) {
      let path = get_provider_details_path(provider, subject_id);
@@ -122,7 +125,7 @@ diff -ruN a/src/cache.rs b/src/cache.rs
  }
  
  pub fn invalidate_provider_details_cache(provider: ProviderKind, subject_id: &str) {
-@@ -399,7 +407,11 @@
+@@ -399,7 +407,11 @@ pub fn invalidate_provider_details_cache(provider: ProviderKind, subject_id: &st
  pub fn get_provider_search_path(provider: ProviderKind, query: &str, page: usize) -> PathBuf {
      let mut path = get_provider_cache_dir(provider, "search");
      let hashed = md5_hex(query);
@@ -135,7 +138,7 @@ diff -ruN a/src/cache.rs b/src/cache.rs
      path
  }
  
-@@ -409,7 +421,7 @@
+@@ -409,7 +421,7 @@ pub fn get_provider_search_cache_typed(
      page: usize,
  ) -> Option<Vec<CatalogItem>> {
      let path = get_provider_search_path(provider, query, page);
@@ -144,7 +147,7 @@ diff -ruN a/src/cache.rs b/src/cache.rs
      (!items.is_empty()).then_some(items)
  }
  
-@@ -423,7 +435,7 @@
+@@ -423,7 +435,7 @@ pub fn set_provider_search_cache_typed(
          return;
      }
      let path = get_provider_search_path(provider, query, page);
@@ -153,7 +156,7 @@ diff -ruN a/src/cache.rs b/src/cache.rs
  }
  
  pub fn get_homepage_path(tab_id: &str, page: usize) -> PathBuf {
-@@ -475,6 +487,11 @@
+@@ -475,6 +487,11 @@ pub fn set_addon_catalog_cache_typed(
      set_typed_cache(&path, HOMEPAGE_CACHE_EXPIRY_SECS, items);
  }
  
@@ -165,10 +168,11 @@ diff -ruN a/src/cache.rs b/src/cache.rs
  pub fn get_addon_manifest_path(manifest_url: &str) -> PathBuf {
      let mut path = get_provider_cache_dir(ProviderKind::Addons, "manifests");
      let hashed = md5_hex(manifest_url);
-diff -ruN a/src/config.rs b/src/config.rs
---- a/src/config.rs	2026-11-22 08:14:08.680856877 +0000
-+++ b/src/config.rs	2026-11-22 08:14:08.693597663 +0000
-@@ -267,6 +267,49 @@
+diff --git a/src/config.rs b/src/config.rs
+index e0e78d6..372f341 100644
+--- a/src/config.rs
++++ b/src/config.rs
+@@ -267,6 +267,49 @@ pub fn load() -> Config {
      Config::default()
  }
  
@@ -218,7 +222,7 @@ diff -ruN a/src/config.rs b/src/config.rs
  pub fn save(config: &Config) {
      let Some(path) = config_path() else {
          return;
-@@ -317,6 +360,17 @@
+@@ -317,6 +360,17 @@ pub fn load_addons() -> Vec<InstalledAddon> {
              }
          }
      }
@@ -236,10 +240,11 @@ diff -ruN a/src/config.rs b/src/config.rs
      list
  }
  
-diff -ruN a/src/download.rs b/src/download.rs
---- a/src/download.rs	2026-11-22 08:14:08.680911769 +0000
-+++ b/src/download.rs	2026-11-22 08:14:08.693614670 +0000
-@@ -173,13 +173,27 @@
+diff --git a/src/download.rs b/src/download.rs
+index 03da668..d829066 100644
+--- a/src/download.rs
++++ b/src/download.rs
+@@ -173,13 +173,27 @@ pub async fn download<F>(
  where
      F: FnMut(DownloadProgress),
  {
@@ -268,30 +273,33 @@ diff -ruN a/src/download.rs b/src/download.rs
  
      for attempt in 1..=MAX_ATTEMPTS {
          let is_segmented_state = metadata.segments.is_some();
-diff -ruN a/src/lib.rs b/src/lib.rs
---- a/src/lib.rs	2026-11-22 08:14:08.681062839 +0000
-+++ b/src/lib.rs	2026-11-22 08:14:08.693636612 +0000
-@@ -10,5 +10,6 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index d1703c5..2677d85 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -10,5 +10,6 @@ pub mod player;
  pub mod providers;
  pub mod proxy;
  pub mod service;
 +pub mod torrent_engine;
  pub mod tui;
  pub mod updater;
-diff -ruN a/src/main.rs b/src/main.rs
---- a/src/main.rs	2026-11-22 08:14:08.681135809 +0000
-+++ b/src/main.rs	2026-11-22 08:14:08.693675643 +0000
-@@ -155,5 +155,6 @@
+diff --git a/src/main.rs b/src/main.rs
+index b6909be..3a7de57 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -155,5 +155,6 @@ async fn main() -> std::io::Result<()> {
      if let Err(err) = app.run(&mut terminal).await {
          log::error!("application error: {err}");
      }
 +    moviebox_tui::torrent_engine::cleanup();
      Ok(())
  }
-diff -ruN a/src/models.rs b/src/models.rs
---- a/src/models.rs	2026-11-22 08:14:08.681171579 +0000
-+++ b/src/models.rs	2026-11-22 08:14:08.693723800 +0000
-@@ -183,6 +183,9 @@
+diff --git a/src/models.rs b/src/models.rs
+index 66515df..23143fd 100644
+--- a/src/models.rs
++++ b/src/models.rs
+@@ -183,6 +183,9 @@ pub struct Notification {
      pub title: String,
      pub message: String,
      pub expires_at: Instant,
@@ -301,7 +309,7 @@ diff -ruN a/src/models.rs b/src/models.rs
  }
  
  impl Notification {
-@@ -197,10 +200,23 @@
+@@ -197,10 +200,23 @@ impl Notification {
              title: title.into(),
              message: message.into(),
              expires_at: Instant::now() + duration,
@@ -326,10 +334,11 @@ diff -ruN a/src/models.rs b/src/models.rs
 +        !self.sticky && Instant::now() >= self.expires_at
      }
  }
-diff -ruN a/src/player.rs b/src/player.rs
---- a/src/player.rs	2026-11-22 08:14:08.681312391 +0000
-+++ b/src/player.rs	2026-11-22 08:14:08.693738487 +0000
-@@ -477,6 +477,7 @@
+diff --git a/src/player.rs b/src/player.rs
+index f7cd1ae..1cc08dc 100644
+--- a/src/player.rs
++++ b/src/player.rs
+@@ -477,6 +477,7 @@ fn mpv_command(
      }
      command.arg(format!("{prefix}geometry=50%:50%"));
      let is_dash = is_dash_url(url);
@@ -337,7 +346,7 @@ diff -ruN a/src/player.rs b/src/player.rs
      command.arg(format!("{prefix}hwdec=auto-safe"));
      command.arg(format!("{prefix}cache=yes"));
      command.arg(format!("{prefix}cache-secs=120"));
-@@ -540,7 +541,7 @@
+@@ -540,7 +541,7 @@ fn mpv_command(
          }
          for (name, value) in headers {
              if !name.eq_ignore_ascii_case("user-agent") && !name.eq_ignore_ascii_case("referer") {
@@ -346,7 +355,7 @@ diff -ruN a/src/player.rs b/src/player.rs
                  command.arg(format!(
                      "{prefix}ytdl-raw-options-append=add-header={name}:{value}"
                  ));
-@@ -1568,6 +1569,107 @@
+@@ -1568,6 +1569,107 @@ pub fn format_mpv_script_opts(
      )
  }
  
@@ -454,10 +463,33 @@ diff -ruN a/src/player.rs b/src/player.rs
  #[cfg(test)]
  mod tests {
      use super::*;
-diff -ruN a/src/providers/addons/adapter.rs b/src/providers/addons/adapter.rs
---- a/src/providers/addons/adapter.rs	2026-11-22 08:14:08.681638911 +0000
-+++ b/src/providers/addons/adapter.rs	2026-11-22 08:14:08.693841318 +0000
-@@ -457,16 +457,114 @@
+diff --git a/src/providers/addons/adapter.rs b/src/providers/addons/adapter.rs
+index d4335ff..e55f14c 100644
+--- a/src/providers/addons/adapter.rs
++++ b/src/providers/addons/adapter.rs
+@@ -172,6 +172,12 @@ pub fn parse_quality(text: &str) -> Option<String> {
+     let upper = text.to_ascii_uppercase();
+     if upper.contains("2160P") || upper.contains("4K") || upper.contains("UHD") {
+         Some("2160p".to_string())
++    } else if upper.contains("1440P")
++        || upper
++            .split(|c: char| !c.is_alphanumeric())
++            .any(|w| matches!(w, "2K" | "QHD"))
++    {
++        Some("1440p".to_string())
+     } else if upper.contains("1080P")
+         || upper.contains("FHD")
+         || upper.contains("FULL HD")
+@@ -190,6 +196,8 @@ pub fn parse_quality(text: &str) -> Option<String> {
+             .any(|w| w == "SD")
+     {
+         Some("480p".to_string())
++    } else if upper.contains("360P") {
++        Some("360p".to_string())
+     } else {
+         None
+     }
+@@ -457,16 +465,114 @@ pub fn parse_season_episode(text: &str) -> Option<(usize, usize)> {
      None
  }
  
@@ -575,7 +607,7 @@ diff -ruN a/src/providers/addons/adapter.rs b/src/providers/addons/adapter.rs
  
      let stream_name_str = stream.name.as_deref().unwrap_or_default();
      let title_str = stream.title.as_deref().unwrap_or_default();
-@@ -475,10 +573,19 @@
+@@ -475,14 +581,29 @@ pub fn stream_item_to_release(
      let combined_text = format!("{stream_name_str} {title_str} {desc_str}");
  
      if season > 0 && episode > 0 {
@@ -599,7 +631,18 @@ diff -ruN a/src/providers/addons/adapter.rs b/src/providers/addons/adapter.rs
          }
      }
  
-@@ -502,8 +609,16 @@
+-    let quality = parse_quality(&combined_text);
++    let filename_hint = stream
++        .behavior_hints
++        .as_ref()
++        .and_then(|h| h.filename.as_deref());
++    let quality = parse_quality(&combined_text)
++        .or_else(|| filename_hint.and_then(parse_quality))
++        .or_else(|| parse_quality(url));
+     let codec = parse_codec(&combined_text);
+     let language = parse_audio_tracks(&combined_text);
+ 
+@@ -502,8 +623,16 @@ pub fn stream_item_to_release(
          .unwrap_or_else(|| format!("{addon_name} Stream"));
  
      let filename = crate::providers::models::clean_stream_text(&raw_filename);
@@ -618,7 +661,7 @@ diff -ruN a/src/providers/addons/adapter.rs b/src/providers/addons/adapter.rs
      let source_label = crate::providers::models::clean_stream_text(&raw_source_label);
      let language = language.map(|l| crate::providers::models::clean_stream_text(&l));
  
-@@ -517,6 +632,8 @@
+@@ -517,6 +646,8 @@ pub fn stream_item_to_release(
              "x-forwarded-for",
              "accept",
              "accept-language",
@@ -627,7 +670,7 @@ diff -ruN a/src/providers/addons/adapter.rs b/src/providers/addons/adapter.rs
          ];
  
          let mut candidate_map = std::collections::HashMap::new();
-@@ -550,6 +667,39 @@
+@@ -550,6 +681,39 @@ pub fn stream_item_to_release(
          }
      }
  
@@ -667,10 +710,11 @@ diff -ruN a/src/providers/addons/adapter.rs b/src/providers/addons/adapter.rs
      Some(Release {
          provider: ProviderKind::Addons,
          filename,
-@@ -586,6 +736,79 @@
+@@ -585,6 +749,79 @@ pub fn release_to_playback_source(release: &Release) -> Option<PlaybackSource> {
+ mod tests {
      use super::*;
  
-     #[test]
++    #[test]
 +    fn test_torrent_stream_maps_to_local_engine_and_file_index() {
 +        let stream = StreamItem {
 +            name: Some("Torrentio\n1080p".to_string()),
@@ -743,13 +787,13 @@ diff -ruN a/src/providers/addons/adapter.rs b/src/providers/addons/adapter.rs
 +        assert!(stream_item_to_release("T", &stream, 0, 0).is_none());
 +    }
 +
-+    #[test]
+     #[test]
      fn test_meta_to_catalog_item() {
          let item = MetaItem {
-             id: "tt1234".to_string(),
-diff -ruN a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator.rs
---- a/src/providers/addons/aggregator.rs	2026-11-22 08:14:08.681698678 +0000
-+++ b/src/providers/addons/aggregator.rs	2026-11-22 08:14:08.693860690 +0000
+diff --git a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator.rs
+index 30f4f37..0ebc27c 100644
+--- a/src/providers/addons/aggregator.rs
++++ b/src/providers/addons/aggregator.rs
 @@ -1,7 +1,12 @@
  use super::adapter::stream_item_to_release;
  use super::client::AddonClient;
@@ -763,7 +807,7 @@ diff -ruN a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator
  
  pub fn clean_addon_subject_id(subject_id: &str) -> &str {
      subject_id
-@@ -10,6 +15,62 @@
+@@ -10,6 +15,62 @@ pub fn clean_addon_subject_id(subject_id: &str) -> &str {
          .unwrap_or(subject_id)
  }
  
@@ -826,7 +870,7 @@ diff -ruN a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator
  pub async fn aggregate_streams(
      client: &AddonClient,
      addons: &[InstalledAddon],
-@@ -18,17 +79,70 @@
+@@ -18,17 +79,70 @@ pub async fn aggregate_streams(
      episode: usize,
      is_series: bool,
  ) -> (Vec<Release>, Vec<String>) {
@@ -902,7 +946,7 @@ diff -ruN a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator
      let stream_id = if is_series && episode > 0 {
          let suffix = format!(":{season}:{episode}");
          if clean_id.ends_with(&suffix) {
-@@ -40,70 +154,168 @@
+@@ -40,70 +154,168 @@ pub async fn aggregate_streams(
          clean_id.to_string()
      };
  
@@ -1012,11 +1056,7 @@ diff -ruN a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator
      let mut blocked_addons = Vec::new();
 +    let mut failed_addons: Vec<(String, String)> = Vec::new();
 +    let mut answered = 0usize;
- 
--    for res in results {
--        all_releases.extend(res.0);
--        if let Some(blocked) = res.1 {
--            blocked_addons.push(blocked);
++
 +    while let Some((idx, releases, blocked, failed)) = pending.next().await {
 +        answered += 1;
 +        let stream_count = releases.len();
@@ -1043,11 +1083,9 @@ diff -ruN a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator
 +            let ranked = rank_releases(all_releases.clone());
 +            sync_found_counts(&mut statuses, &ranked);
 +            on_update(ranked, total - answered, statuses.clone());
-         }
-     }
- 
--    let mut deduplicated: Vec<Release> = Vec::new();
--    for rel in all_releases {
++        }
++    }
++
 +    let releases = rank_releases(all_releases);
 +    sync_found_counts(&mut statuses, &releases);
 +    StreamAggregation {
@@ -1057,7 +1095,11 @@ diff -ruN a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator
 +        statuses,
 +    }
 +}
-+
+ 
+-    for res in results {
+-        all_releases.extend(res.0);
+-        if let Some(blocked) = res.1 {
+-            blocked_addons.push(blocked);
 +fn sync_found_counts(statuses: &mut [AddonStreamStatus], ranked: &[Release]) {
 +    for status in statuses.iter_mut() {
 +        if matches!(status.state, AddonStreamState::Found(_)) {
@@ -1070,10 +1112,12 @@ diff -ruN a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator
 +            } else {
 +                AddonStreamState::Empty
 +            };
-+        }
-+    }
+         }
+     }
 +}
-+
+ 
+-    let mut deduplicated: Vec<Release> = Vec::new();
+-    for rel in all_releases {
 +/// Merges duplicate links and orders the streams best first.
 +fn rank_releases(all_releases: Vec<(Release, Option<u32>)>) -> Vec<Release> {
 +    let mut deduplicated: Vec<(Release, Option<u32>)> = Vec::new();
@@ -1094,7 +1138,7 @@ diff -ruN a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator
              for m in rel.mirrors {
                  if !existing
                      .mirrors
-@@ -114,31 +326,72 @@
+@@ -114,40 +326,107 @@ pub async fn aggregate_streams(
                  }
              }
          } else {
@@ -1121,20 +1165,23 @@ diff -ruN a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator
 -            }
 -            other => other,
 -        }
-+    // Ranking, best first. Resolution always comes first, so a 1080p stream is
-+    // never listed below a 720p one. Inside one resolution:
-+    //   1. direct HTTP / Debrid streams (they start instantly)
-+    //   2. torrents, healthiest swarm first (30+ seeds, 5-29, unknown, 1-4, 0)
-+    //   3. more seeders first within the same health tier
-+    //   4. size, then addon label, filename and URL, so the order is fully
++    // Ranking, best first. Quality bracket always comes first, so a 1080p
++    // stream is never listed above a 4K/2160p one (nor below a 720p one).
++    // Inside one quality bracket:
++    //   1. HTTPS URLs (direct / Debrid streams)
++    //   2. plain HTTP URLs (non-torrent)
++    //   3. good torrents, healthiest swarm first (30+ seeds, 5-29 seeds)
++    //   4. unknown-seeder torrents, then bad torrents (1-4 seeds, 0 seeds)
++    //   5. more seeders first within the same health tier
++    //   6. size, then addon label, filename and URL, so the order is fully
 +    //      deterministic and does not shuffle when addons answer in a
 +    //      different order.
 +    // CAM/telesync-type rips are pushed to the very bottom of the list.
 +    deduplicated.sort_by(|(a, seeders_a), (b, seeders_b)| {
-+        let is_torrent_a = a.direct_url().is_some_and(is_gateway_stream_url);
-+        let is_torrent_b = b.direct_url().is_some_and(is_gateway_stream_url);
-+        let tier_a = swarm_tier(*seeders_a, is_torrent_a, &a.filename);
-+        let tier_b = swarm_tier(*seeders_b, is_torrent_b, &b.filename);
++        let url_a = a.direct_url().unwrap_or("");
++        let url_b = b.direct_url().unwrap_or("");
++        let tier_a = source_tier(url_a, *seeders_a, &a.filename);
++        let tier_b = source_tier(url_b, *seeders_b, &b.filename);
 +        let junk_a = tier_a == 0;
 +        let junk_b = tier_b == 0;
 +        junk_a
@@ -1155,27 +1202,34 @@ diff -ruN a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator
 +                label_a.cmp(label_b)
 +            })
 +            .then_with(|| a.filename.cmp(&b.filename))
-+            .then_with(|| a.direct_url().unwrap_or("").cmp(b.direct_url().unwrap_or("")))
++            .then_with(|| url_a.cmp(url_b))
      });
  
 -    (deduplicated, blocked_addons)
 +    deduplicated.into_iter().map(|(rel, _)| rel).collect()
 +}
 +
-+/// Seeder counts that split torrents into health tiers.
++/// Seeder counts that split torrents into good vs bad health tiers.
 +const SEEDS_HEALTHY: u32 = 30;
 +const SEEDS_OK: u32 = 5;
 +
-+/// Playability tier inside one resolution, best first:
-+/// 6 = direct HTTP / Debrid stream, 5 = healthy torrent (30+ seeds),
-+/// 4 = workable swarm (5-29), 3 = unknown seeder count, 2 = barely alive (1-4),
-+/// 1 = dead torrent (0 seeds), 0 = CAM/telesync-type rip (listed last overall).
-+fn swarm_tier(seeders: Option<u32>, is_torrent: bool, filename: &str) -> u8 {
++fn is_https_url(url: &str) -> bool {
++    url.trim_start()
++        .get(..8)
++        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("https://"))
++}
++
++/// Playability tier inside one quality bracket, best first:
++/// 7 = direct HTTPS URL, 6 = direct HTTP URL,
++/// 5 = good torrent (30+ seeds), 4 = good torrent (5-29 seeds),
++/// 3 = unknown seeder count, 2 = bad torrent (1-4 seeds),
++/// 1 = bad torrent (0 seeds), 0 = CAM/telesync-type rip (listed last overall).
++fn source_tier(url: &str, seeders: Option<u32>, filename: &str) -> u8 {
 +    if is_low_quality_source(filename) {
 +        return 0;
 +    }
-+    if !is_torrent {
-+        return 6;
++    if !is_gateway_stream_url(url) {
++        return if is_https_url(url) { 7 } else { 6 };
 +    }
 +    match seeders {
 +        Some(0) => 1,
@@ -1184,10 +1238,41 @@ diff -ruN a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator
 +        Some(n) if n < SEEDS_HEALTHY => 4,
 +        Some(_) => 5,
 +    }
++}
++
++#[cfg(test)]
++fn swarm_tier(seeders: Option<u32>, is_torrent: bool, filename: &str) -> u8 {
++    let url = if is_torrent {
++        "http://127.0.0.1:11490/stream?link=magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567"
++    } else {
++        "https://cdn.example.com/video.mp4"
++    };
++    source_tier(url, seeders, filename)
  }
  
  fn quality_score(quality: Option<&str>) -> u32 {
-@@ -157,7 +410,7 @@
+-    match quality {
+-        Some("2160p") => 40,
+-        Some("1080p") => 30,
+-        Some("720p") => 20,
+-        Some("480p") => 10,
+-        _ => 0,
++    let Some(q) = quality.map(str::trim).filter(|s| !s.is_empty()) else {
++        return 0;
++    };
++    let lower = q.to_ascii_lowercase();
++    match lower.as_str() {
++        "4k" | "uhd" | "2160p" => 2160,
++        "2k" | "qhd" | "1440p" => 1440,
++        "fhd" | "fullhd" | "full hd" | "1080p" => 1080,
++        "hd" | "720p" => 720,
++        "sd" | "480p" => 480,
++        "360p" => 360,
++        _ => lower.trim_end_matches('p').parse::<u32>().unwrap_or(0),
+     }
+ }
+ 
+@@ -157,7 +436,7 @@ mod tests {
      use tokio::io::{AsyncReadExt, AsyncWriteExt};
  
      #[tokio::test]
@@ -1196,7 +1281,7 @@ diff -ruN a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator
          let listener1 = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
          let addr1 = listener1.local_addr().unwrap();
          tokio::spawn(async move {
-@@ -184,7 +437,7 @@
+@@ -184,7 +463,7 @@ mod tests {
                  let mut buf = [0u8; 1024];
                  let _ = stream.read(&mut buf).await;
                  let body = r#"{"streams":[
@@ -1205,7 +1290,7 @@ diff -ruN a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator
                  ]}"#;
                  let resp = format!(
                      "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-@@ -207,6 +460,7 @@
+@@ -207,6 +486,7 @@ mod tests {
                  provides_stream: true,
                  id_prefixes: vec![],
                  types: vec!["movie".to_string()],
@@ -1213,7 +1298,7 @@ diff -ruN a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator
              },
              InstalledAddon {
                  manifest_url: format!("http://{addr2}/manifest.json"),
-@@ -219,6 +473,7 @@
+@@ -219,6 +499,7 @@ mod tests {
                  provides_stream: true,
                  id_prefixes: vec![],
                  types: vec!["movie".to_string()],
@@ -1221,10 +1306,11 @@ diff -ruN a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator
              },
          ];
  
-@@ -232,6 +487,80 @@
+@@ -231,6 +512,137 @@ mod tests {
+         assert_eq!(releases[1].quality.as_deref(), Some("720p"));
      }
  
-     #[test]
++    #[test]
 +    fn swarm_tiers_rank_http_then_torrent_health() {
 +        let name = "Movie.2024.1080p.WEB-DL.mkv";
 +        assert!(swarm_tier(Some(0), true, name) < swarm_tier(Some(2), true, name));
@@ -1298,11 +1384,67 @@ diff -ruN a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator
 +        }
 +    }
 +
++
 +    #[test]
++    fn quality_first_https_then_good_then_bad_torrents_per_bracket() {
++        fn release(filename: &str, quality: Option<&str>, url: &str) -> Release {
++            Release {
++                provider: crate::providers::models::ProviderKind::Addons,
++                filename: filename.to_string(),
++                quality: quality.map(str::to_string),
++                codec: None,
++                language: None,
++                size_bytes: Some(1_000_000_000),
++                season: None,
++                episode: None,
++                mirrors: vec![crate::providers::models::SourceMirror {
++                    label: "Addon".to_string(),
++                    resolver_url: url.to_string(),
++                    headers: Vec::new(),
++                    direct_file: false,
++                }],
++                resource_id: None,
++            }
++        }
++        let torrent = |n: &str| {
++            format!(
++                "{}/stream?link=magnet:?xt=urn:btih:{n}",
++                crate::config::torrent_engine_base()
++            )
++        };
++        let list = vec![
++            (release("bad.4k.mkv", Some("4K"), &torrent("1")), Some(0)),
++            (release("http.4k.mp4", Some("2160p"), "http://cdn.example.com/4k.mp4"), None),
++            (release("good.4k.mkv", Some("2160p"), &torrent("2")), Some(80)),
++            (release("https.4k.mp4", Some("4K"), "https://cdn.example.com/4k.mp4"), None),
++            (release("bad.1080p.mkv", Some("1080p"), &torrent("3")), Some(2)),
++            (release("good.1080p.mkv", Some("1080P"), &torrent("4")), Some(120)),
++            (release("https.1080p.mp4", Some("1080p"), "https://cdn.example.com/1080p.mp4"), None),
++            (release("unknown.mp4", None, "https://cdn.example.com/unknown.mp4"), None),
++        ];
++        let order: Vec<String> = rank_releases(list)
++            .into_iter()
++            .map(|r| r.filename)
++            .collect();
++        assert_eq!(
++            order,
++            [
++                "https.4k.mp4",
++                "http.4k.mp4",
++                "good.4k.mkv",
++                "bad.4k.mkv",
++                "https.1080p.mp4",
++                "good.1080p.mkv",
++                "bad.1080p.mkv",
++                "unknown.mp4",
++            ]
++        );
++    }
++
+     #[test]
      fn test_clean_addon_subject_id_preserves_namespaces() {
          assert_eq!(clean_addon_subject_id("series:kitsu:12345"), "kitsu:12345");
-         assert_eq!(clean_addon_subject_id("movie:kitsu:999"), "kitsu:999");
-@@ -239,4 +568,17 @@
+@@ -239,4 +651,17 @@ mod tests {
          assert_eq!(clean_addon_subject_id("movie:tt1234567"), "tt1234567");
          assert_eq!(clean_addon_subject_id("tt1234567"), "tt1234567");
      }
@@ -1320,9 +1462,10 @@ diff -ruN a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator
 +        assert!(!mirror_matches_addon("Flix-Streams", ""));
 +    }
  }
-diff -ruN a/src/providers/addons/client.rs b/src/providers/addons/client.rs
---- a/src/providers/addons/client.rs	2026-11-22 08:14:08.681737435 +0000
-+++ b/src/providers/addons/client.rs	2026-11-22 08:14:08.693876228 +0000
+diff --git a/src/providers/addons/client.rs b/src/providers/addons/client.rs
+index 131f001..d405adb 100644
+--- a/src/providers/addons/client.rs
++++ b/src/providers/addons/client.rs
 @@ -1,7 +1,14 @@
 -use super::models::{AddonManifest, MetaDetail, MetaItem, StreamItem};
 +use super::models::{
@@ -1339,7 +1482,7 @@ diff -ruN a/src/providers/addons/client.rs b/src/providers/addons/client.rs
  #[derive(Clone, Debug)]
  pub struct AddonClient {
      http: Client,
-@@ -15,19 +22,30 @@
+@@ -15,19 +22,30 @@ impl Default for AddonClient {
  
  impl AddonClient {
      pub fn new() -> Self {
@@ -1374,7 +1517,7 @@ diff -ruN a/src/providers/addons/client.rs b/src/providers/addons/client.rs
          } else if !crate::net::is_http_url(&url) {
              url = format!("https://{url}");
          }
-@@ -35,11 +53,15 @@
+@@ -35,11 +53,15 @@ impl AddonClient {
              Some(idx) => (&url[..idx], &url[idx..]),
              None => (url.as_str(), ""),
          };
@@ -1394,7 +1537,7 @@ diff -ruN a/src/providers/addons/client.rs b/src/providers/addons/client.rs
      }
  
      pub fn base_addon_url(manifest_url: &str) -> String {
-@@ -75,10 +97,11 @@
+@@ -75,10 +97,11 @@ impl AddonClient {
              return Err(format!("Manifest returned HTTP {}", resp.status()));
          }
  
@@ -1407,7 +1550,7 @@ diff -ruN a/src/providers/addons/client.rs b/src/providers/addons/client.rs
  
          if manifest.name.trim().is_empty() {
              return Err("Addon manifest missing valid name".to_string());
-@@ -201,13 +224,50 @@
+@@ -201,13 +224,50 @@ impl AddonClient {
          let resp = self
              .http
              .get(&endpoint)
@@ -1461,7 +1604,7 @@ diff -ruN a/src/providers/addons/client.rs b/src/providers/addons/client.rs
  
          let mut raw: serde_json::Value = resp
              .json()
-@@ -215,16 +275,171 @@
+@@ -215,16 +275,171 @@ impl AddonClient {
              .map_err(|e| format!("Invalid streams response JSON: {e}"))?;
  
          if let Some(val) = raw.get_mut("streams").map(serde_json::Value::take) {
@@ -1636,7 +1779,7 @@ diff -ruN a/src/providers/addons/client.rs b/src/providers/addons/client.rs
  fn parse_catalog_metas(mut raw: serde_json::Value) -> Result<Vec<MetaItem>, String> {
      if let Some(val) = raw.get_mut("metas").map(serde_json::Value::take) {
          serde_json::from_value(val).map_err(|e| format!("Failed to parse metas: {e}"))
-@@ -238,3 +453,96 @@
+@@ -238,3 +453,96 @@ fn parse_catalog_metas(mut raw: serde_json::Value) -> Result<Vec<MetaItem>, Stri
          Ok(Vec::new())
      }
  }
@@ -1733,10 +1876,11 @@ diff -ruN a/src/providers/addons/client.rs b/src/providers/addons/client.rs
 +        assert_eq!(size(2), None);
 +    }
 +}
-diff -ruN a/src/providers/addons/mod.rs b/src/providers/addons/mod.rs
---- a/src/providers/addons/mod.rs	2026-11-22 08:14:08.681775638 +0000
-+++ b/src/providers/addons/mod.rs	2026-11-22 08:15:33.289435402 +0000
-@@ -2,12 +2,18 @@
+diff --git a/src/providers/addons/mod.rs b/src/providers/addons/mod.rs
+index 6d7af7f..8165417 100644
+--- a/src/providers/addons/mod.rs
++++ b/src/providers/addons/mod.rs
+@@ -2,12 +2,18 @@ pub mod adapter;
  pub mod aggregator;
  pub mod client;
  pub mod models;
@@ -1756,7 +1900,7 @@ diff -ruN a/src/providers/addons/mod.rs b/src/providers/addons/mod.rs
  pub use client::AddonClient;
  pub use models::{AddonManifest, InstalledAddon, MetaDetail, MetaItem, StreamItem};
  
-@@ -33,41 +39,59 @@
+@@ -33,41 +39,59 @@ impl Provider for AddonClient {
          let addons = tokio::task::spawn_blocking(crate::config::load_addons)
              .await
              .unwrap_or_default();
@@ -1839,7 +1983,7 @@ diff -ruN a/src/providers/addons/mod.rs b/src/providers/addons/mod.rs
      }
  
      async fn details(&self, id: &str) -> Result<MediaDetails, ProviderError> {
-@@ -111,42 +135,68 @@
+@@ -111,42 +135,68 @@ impl Provider for AddonClient {
              vec!["series", "movie", "tv", "anime", "other"]
          };
  
@@ -1935,7 +2079,7 @@ diff -ruN a/src/providers/addons/mod.rs b/src/providers/addons/mod.rs
              let mut details = adapter::meta_detail_to_media_details(&d);
              if let Some(hint) = &type_hint {
                  details.id.value = format!("{hint}:{clean_id}");
-@@ -157,3 +207,90 @@
+@@ -157,3 +207,90 @@ impl Provider for AddonClient {
          Err(ProviderError::NotFound)
      }
  }
@@ -2026,10 +2170,11 @@ diff -ruN a/src/providers/addons/mod.rs b/src/providers/addons/mod.rs
 +        }
 +    }
 +}
-diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
---- a/src/providers/addons/models.rs	2026-11-22 08:14:08.681881313 +0000
-+++ b/src/providers/addons/models.rs	2026-11-22 08:14:14.277676637 +0000
-@@ -130,6 +130,27 @@
+diff --git a/src/providers/addons/models.rs b/src/providers/addons/models.rs
+index 7b392a9..1a50bb9 100644
+--- a/src/providers/addons/models.rs
++++ b/src/providers/addons/models.rs
+@@ -130,6 +130,27 @@ where
      deserializer.deserialize_any(StringOrNumberVisitor)
  }
  
@@ -2057,7 +2202,7 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
  fn de_opt_usize_or_string<'de, D>(deserializer: D) -> Result<Option<usize>, D::Error>
  where
      D: serde::Deserializer<'de>,
-@@ -400,7 +421,7 @@
+@@ -400,7 +421,7 @@ pub struct MetaDetail {
      pub videos: Vec<MetaVideo>,
  }
  
@@ -2066,7 +2211,7 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
  pub struct StreamBehaviorHints {
      #[serde(rename = "notWebReady", default)]
      pub not_web_ready: bool,
-@@ -408,12 +429,16 @@
+@@ -408,12 +429,16 @@ pub struct StreamBehaviorHints {
      pub headers: Option<HashMap<String, String>>,
      #[serde(rename = "proxyHeaders", default)]
      pub proxy_headers: Option<serde_json::Value>,
@@ -2085,7 +2230,7 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
  pub struct StreamItem {
      pub name: Option<String>,
      pub title: Option<String>,
-@@ -421,6 +446,19 @@
+@@ -421,6 +446,19 @@ pub struct StreamItem {
      pub url: Option<String>,
      #[serde(rename = "behaviorHints")]
      pub behavior_hints: Option<StreamBehaviorHints>,
@@ -2105,7 +2250,7 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
  }
  
  #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-@@ -440,6 +478,8 @@
+@@ -440,6 +478,8 @@ pub struct InstalledAddon {
      pub id_prefixes: Vec<String>,
      #[serde(default)]
      pub types: Vec<String>,
@@ -2114,7 +2259,7 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
  }
  
  impl InstalledAddon {
-@@ -457,6 +497,7 @@
+@@ -457,6 +497,7 @@ impl InstalledAddon {
              provides_stream: false,
              id_prefixes: vec!["tt".to_string()],
              types: vec!["movie".to_string(), "series".to_string()],
@@ -2122,7 +2267,7 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
          }
      }
  
-@@ -477,6 +518,7 @@
+@@ -477,6 +518,7 @@ impl InstalledAddon {
              provides_stream: manifest.provides_stream(),
              id_prefixes: manifest.id_prefixes.clone(),
              types: manifest.types.clone(),
@@ -2130,7 +2275,7 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
          }
      }
  }
-@@ -490,11 +532,80 @@
+@@ -490,11 +532,80 @@ pub struct AddonCatalogTarget {
      pub catalog_id: String,
  }
  
@@ -2213,7 +2358,7 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
          .collect();
  
      let multi = enabled_catalogs.len() > 1;
-@@ -506,13 +617,43 @@
+@@ -506,13 +617,43 @@ pub fn curated_catalog_presets(addons: &[InstalledAddon]) -> Vec<AddonCatalogTar
              String::new()
          };
  
@@ -2258,7 +2403,7 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
                  label: format!("Top Movies{suffix}"),
                  addon_name: addon.name.clone(),
                  manifest_url: addon.manifest_url.clone(),
-@@ -521,7 +662,7 @@
+@@ -521,7 +662,7 @@ pub fn curated_catalog_presets(addons: &[InstalledAddon]) -> Vec<AddonCatalogTar
              });
          }
          if has_series {
@@ -2267,7 +2412,7 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
                  label: format!("Top Series{suffix}"),
                  addon_name: addon.name.clone(),
                  manifest_url: addon.manifest_url.clone(),
-@@ -530,7 +671,7 @@
+@@ -530,7 +671,7 @@ pub fn curated_catalog_presets(addons: &[InstalledAddon]) -> Vec<AddonCatalogTar
              });
          }
          if has_movies && addon.is_core() {
@@ -2276,7 +2421,7 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
                  label: format!("Top Rated Movies{suffix}"),
                  addon_name: addon.name.clone(),
                  manifest_url: addon.manifest_url.clone(),
-@@ -539,7 +680,7 @@
+@@ -539,7 +680,7 @@ pub fn curated_catalog_presets(addons: &[InstalledAddon]) -> Vec<AddonCatalogTar
              });
          }
          if has_series && addon.is_core() {
@@ -2285,7 +2430,7 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
                  label: format!("Top Rated Series{suffix}"),
                  addon_name: addon.name.clone(),
                  manifest_url: addon.manifest_url.clone(),
-@@ -547,7 +688,7 @@
+@@ -547,7 +688,7 @@ pub fn curated_catalog_presets(addons: &[InstalledAddon]) -> Vec<AddonCatalogTar
                  catalog_id: "imdbRating".to_string(),
              });
          }
@@ -2294,7 +2439,7 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
              break;
          }
      }
-@@ -584,6 +725,33 @@
+@@ -584,6 +725,33 @@ pub fn curated_catalog_presets(addons: &[InstalledAddon]) -> Vec<AddonCatalogTar
          });
      }
  
@@ -2329,9 +2474,11 @@ diff -ruN a/src/providers/addons/models.rs b/src/providers/addons/models.rs
 +        })
 +        .cloned()
 +}
-diff -ruN a/src/providers/addons/nuvio.rs b/src/providers/addons/nuvio.rs
---- a/src/providers/addons/nuvio.rs	1970-01-01 00:00:00.000000000 +0000
-+++ b/src/providers/addons/nuvio.rs	2026-11-22 08:14:08.693915985 +0000
+diff --git a/src/providers/addons/nuvio.rs b/src/providers/addons/nuvio.rs
+new file mode 100644
+index 0000000..77d020c
+--- /dev/null
++++ b/src/providers/addons/nuvio.rs
 @@ -0,0 +1,862 @@
 +//! Nuvio plugin support.
 +//!
@@ -3195,9 +3342,11 @@ diff -ruN a/src/providers/addons/nuvio.rs b/src/providers/addons/nuvio.rs
 +        let _ = std::fs::remove_dir_all(&dir);
 +    }
 +}
-diff -ruN a/src/providers/addons/nuvio_runner.cjs b/src/providers/addons/nuvio_runner.cjs
---- a/src/providers/addons/nuvio_runner.cjs	1970-01-01 00:00:00.000000000 +0000
-+++ b/src/providers/addons/nuvio_runner.cjs	2026-11-22 08:14:08.693933197 +0000
+diff --git a/src/providers/addons/nuvio_runner.cjs b/src/providers/addons/nuvio_runner.cjs
+new file mode 100644
+index 0000000..1d13ccd
+--- /dev/null
++++ b/src/providers/addons/nuvio_runner.cjs
 @@ -0,0 +1,186 @@
 +'use strict';
 +// Runs one Nuvio scraper (a JavaScript file exposing getStreams) and prints
@@ -3385,10 +3534,12 @@ diff -ruN a/src/providers/addons/nuvio_runner.cjs b/src/providers/addons/nuvio_r
 +}
 +
 +main().catch((e) => finish({ error: String(e && e.message ? e.message : e) }, 1));
-diff -ruN a/src/providers/addons/torrent.rs b/src/providers/addons/torrent.rs
---- a/src/providers/addons/torrent.rs	1970-01-01 00:00:00.000000000 +0000
-+++ b/src/providers/addons/torrent.rs	2026-11-22 08:14:08.693963481 +0000
-@@ -0,0 +1,503 @@
+diff --git a/src/providers/addons/torrent.rs b/src/providers/addons/torrent.rs
+new file mode 100644
+index 0000000..6e5af27
+--- /dev/null
++++ b/src/providers/addons/torrent.rs
+@@ -0,0 +1,525 @@
 +//! Torrent helpers for addon streams: smart file selection, peer-source hints
 +//! and lazy preparation of the built-in torrent engine (`crate::torrent_engine`).
 +
@@ -3439,13 +3590,31 @@ diff -ruN a/src/providers/addons/torrent.rs b/src/providers/addons/torrent.rs
 +            .collect();
 +        digits.parse().ok()
 +    }
-+    if let Some((_, rest)) = text.split_once('👤') {
-+        return leading_number(rest);
++    for marker in ['👤', '👥', '🌱'] {
++        if let Some((_, rest)) = text.split_once(marker)
++            && let Some(n) = leading_number(rest)
++        {
++            return Some(n);
++        }
 +    }
 +    let lower = text.to_ascii_lowercase();
 +    for key in ["seeders", "seeder", "seeds"] {
-+        if let Some((_, rest)) = lower.split_once(key) {
-+            return leading_number(rest);
++        if let Some((before, rest)) = lower.split_once(key) {
++            if let Some(n) = leading_number(rest) {
++                return Some(n);
++            }
++            let trailing_digits: String = before
++                .trim_end_matches([' ', '\t', ':', '=', '(', '['])
++                .chars()
++                .rev()
++                .take_while(char::is_ascii_digit)
++                .collect::<String>()
++                .chars()
++                .rev()
++                .collect();
++            if let Ok(n) = trailing_digits.parse::<u32>() {
++                return Some(n);
++            }
 +        }
 +    }
 +    None
@@ -3758,8 +3927,12 @@ diff -ruN a/src/providers/addons/torrent.rs b/src/providers/addons/torrent.rs
 +    #[test]
 +    fn parses_seeder_counts() {
 +        assert_eq!(parse_seeders("Movie.2024.1080p\n👤 128 💾 2.1 GB ⚙️ YTS"), Some(128));
++        assert_eq!(parse_seeders("👥 42 | 1.8 GB"), Some(42));
++        assert_eq!(parse_seeders("🌱 19"), Some(19));
 +        assert_eq!(parse_seeders("👤 0 💾 1 GB"), Some(0));
 +        assert_eq!(parse_seeders("Seeders: 7 | Size: 1 GB"), Some(7));
++        assert_eq!(parse_seeders("Torrentio · Torrent · 128 seeds"), Some(128));
++        assert_eq!(parse_seeders("0 seeds"), Some(0));
 +        assert_eq!(parse_seeders("Movie.2024.1080p 2.1 GB"), None);
 +    }
 +
@@ -3892,10 +4065,11 @@ diff -ruN a/src/providers/addons/torrent.rs b/src/providers/addons/torrent.rs
 +        assert!(normalize_magnet("https://x.test/a", None, None, &[]).is_none());
 +    }
 +}
-diff -ruN a/src/service.rs b/src/service.rs
---- a/src/service.rs	2026-11-22 08:14:08.683963611 +0000
-+++ b/src/service.rs	2026-11-22 08:14:08.695730248 +0000
-@@ -137,6 +137,59 @@
+diff --git a/src/service.rs b/src/service.rs
+index e4e5027..46249d1 100644
+--- a/src/service.rs
++++ b/src/service.rs
+@@ -137,6 +137,59 @@ impl MovieBoxService {
          Ok(items)
      }
  
@@ -3955,9 +4129,11 @@ diff -ruN a/src/service.rs b/src/service.rs
      pub async fn details_typed(
          &self,
          provider: ProviderKind,
-diff -ruN a/src/torrent_engine.rs b/src/torrent_engine.rs
---- a/src/torrent_engine.rs	1970-01-01 00:00:00.000000000 +0000
-+++ b/src/torrent_engine.rs	2026-11-22 08:14:08.694436158 +0000
+diff --git a/src/torrent_engine.rs b/src/torrent_engine.rs
+new file mode 100644
+index 0000000..400e6a1
+--- /dev/null
++++ b/src/torrent_engine.rs
 @@ -0,0 +1,756 @@
 +//! Built-in torrent engine.
 +//!
@@ -4715,10 +4891,11 @@ diff -ruN a/src/torrent_engine.rs b/src/torrent_engine.rs
 +        assert_eq!(info_hash_from_magnet("magnet:?dn=x"), None);
 +    }
 +}
-diff -ruN a/src/tui/action.rs b/src/tui/action.rs
---- a/src/tui/action.rs	2026-11-22 08:14:08.684027786 +0000
-+++ b/src/tui/action.rs	2026-11-22 08:14:08.695326250 +0000
-@@ -118,6 +118,25 @@
+diff --git a/src/tui/action.rs b/src/tui/action.rs
+index a2a683f..09ad9a3 100644
+--- a/src/tui/action.rs
++++ b/src/tui/action.rs
+@@ -118,6 +118,25 @@ pub enum Action {
          usize,
          Vec<crate::providers::models::Release>,
      ),
@@ -4744,10 +4921,11 @@ diff -ruN a/src/tui/action.rs b/src/tui/action.rs
      EpisodeStreamsFailed(
          crate::providers::models::RequestContext,
          u64,
-diff -ruN a/src/tui/app/addons.rs b/src/tui/app/addons.rs
---- a/src/tui/app/addons.rs	2026-11-22 08:14:08.684108571 +0000
-+++ b/src/tui/app/addons.rs	2026-11-22 08:14:08.694491221 +0000
-@@ -41,6 +41,37 @@
+diff --git a/src/tui/app/addons.rs b/src/tui/app/addons.rs
+index bdc9e22..0a95c4e 100644
+--- a/src/tui/app/addons.rs
++++ b/src/tui/app/addons.rs
+@@ -41,6 +41,37 @@ impl App {
                  let sender = self.action_sender.clone();
  
                  tokio::spawn(async move {
@@ -4785,7 +4963,7 @@ diff -ruN a/src/tui/app/addons.rs b/src/tui/app/addons.rs
                      match client.fetch_manifest(&url).await {
                          Ok(manifest) => {
                              let installed = InstalledAddon::from_manifest(url.clone(), &manifest);
-@@ -62,6 +93,36 @@
+@@ -62,6 +93,36 @@ impl App {
                              .await;
                              sender.send(Action::ShowAddonManager).ok();
                          }
@@ -4822,10 +5000,11 @@ diff -ruN a/src/tui/app/addons.rs b/src/tui/app/addons.rs
                          Err(err) => {
                              sender
                                  .send(Action::SetStatus(format!(
-diff -ruN a/src/tui/app/download.rs b/src/tui/app/download.rs
---- a/src/tui/app/download.rs	2026-11-22 08:14:08.684310771 +0000
-+++ b/src/tui/app/download.rs	2026-11-22 08:14:08.694503384 +0000
-@@ -583,10 +583,23 @@
+diff --git a/src/tui/app/download.rs b/src/tui/app/download.rs
+index 2fcb1f6..b0e5429 100644
+--- a/src/tui/app/download.rs
++++ b/src/tui/app/download.rs
+@@ -583,10 +583,23 @@ impl App {
                          {
                              let sender_clone = self.action_sender.clone();
                              let max_height = Some(release.resolution_u64()).filter(|&h| h > 0);
@@ -4850,10 +5029,11 @@ diff -ruN a/src/tui/app/download.rs b/src/tui/app/download.rs
                                      first_mirror.headers.clone(),
                                      max_height,
                                  ))
-diff -ruN a/src/tui/app/favorites.rs b/src/tui/app/favorites.rs
---- a/src/tui/app/favorites.rs	2026-11-22 08:14:08.684359911 +0000
-+++ b/src/tui/app/favorites.rs	2026-11-22 08:14:08.694620144 +0000
-@@ -154,6 +154,8 @@
+diff --git a/src/tui/app/favorites.rs b/src/tui/app/favorites.rs
+index 4b19ba9..3ffb114 100644
+--- a/src/tui/app/favorites.rs
++++ b/src/tui/app/favorites.rs
+@@ -154,6 +154,8 @@ impl App {
              self.state.search_preview.as_ref(),
          ));
          self.state.selected_resources.clear();
@@ -4862,7 +5042,7 @@ diff -ruN a/src/tui/app/favorites.rs b/src/tui/app/favorites.rs
          self.state.is_loading = true;
          self.state.is_fetching_streams = false;
          self.state.stream_error = None;
-@@ -197,6 +199,8 @@
+@@ -197,6 +199,8 @@ impl App {
              self.state.search_preview.as_ref(),
          ));
          self.state.selected_resources.clear();
@@ -4871,10 +5051,11 @@ diff -ruN a/src/tui/app/favorites.rs b/src/tui/app/favorites.rs
          self.state.is_loading = true;
          self.state.is_fetching_streams = false;
          self.state.stream_error = None;
-diff -ruN a/src/tui/app/keyboard.rs b/src/tui/app/keyboard.rs
---- a/src/tui/app/keyboard.rs	2026-11-22 08:14:08.684529477 +0000
-+++ b/src/tui/app/keyboard.rs	2026-11-22 08:14:08.694637123 +0000
-@@ -82,6 +82,33 @@
+diff --git a/src/tui/app/keyboard.rs b/src/tui/app/keyboard.rs
+index 9999bd0..e3ca7c8 100644
+--- a/src/tui/app/keyboard.rs
++++ b/src/tui/app/keyboard.rs
+@@ -82,6 +82,33 @@ impl App {
              }
          }
  
@@ -4908,7 +5089,7 @@ diff -ruN a/src/tui/app/keyboard.rs b/src/tui/app/keyboard.rs
          if let KeyCode::Char('x') | KeyCode::Char('X') = key.code
              && self.state.download_progress.is_some()
              && self.state.input_mode != InputMode::Editing
-@@ -1210,6 +1237,40 @@
+@@ -1210,6 +1237,40 @@ impl App {
                                  self.action_sender.send(Action::Refresh).ok();
                              }
                          }
@@ -4949,10 +5130,11 @@ diff -ruN a/src/tui/app/keyboard.rs b/src/tui/app/keyboard.rs
                          KeyCode::Char('?') => {
                              self.action_sender.send(Action::ToggleHelp).ok();
                          }
-diff -ruN a/src/tui/app/mouse.rs b/src/tui/app/mouse.rs
---- a/src/tui/app/mouse.rs	2026-11-22 08:14:08.684970906 +0000
-+++ b/src/tui/app/mouse.rs	2026-11-22 08:14:08.694668495 +0000
-@@ -1128,11 +1128,38 @@
+diff --git a/src/tui/app/mouse.rs b/src/tui/app/mouse.rs
+index f4617e7..974e82a 100644
+--- a/src/tui/app/mouse.rs
++++ b/src/tui/app/mouse.rs
+@@ -1128,11 +1128,38 @@ impl App {
  
          if streams_area.contains(ratatui::layout::Position::new(col, row)) {
              self.state.details_pane = DetailsPane::Streams;
@@ -4993,7 +5175,7 @@ diff -ruN a/src/tui/app/mouse.rs b/src/tui/app/mouse.rs
                  } else {
                      streams_area.y.saturating_add(1)
                  };
-@@ -1181,6 +1208,7 @@
+@@ -1181,6 +1208,7 @@ impl App {
          enum FooterAction {
              PlaySelect,
              Download,
@@ -5001,7 +5183,7 @@ diff -ruN a/src/tui/app/mouse.rs b/src/tui/app/mouse.rs
              StreamsTab,
              Favorite,
              Info,
-@@ -1202,7 +1230,9 @@
+@@ -1202,7 +1230,9 @@ impl App {
          }
  
          let mut secondary = Vec::new();
@@ -5012,7 +5194,7 @@ diff -ruN a/src/tui/app/mouse.rs b/src/tui/app/mouse.rs
              secondary.push((FooterAction::StreamsTab, 5 + 1 + 7));
          }
          secondary.push((FooterAction::Favorite, 3 + 1 + fav_label_len));
-@@ -1258,6 +1288,9 @@
+@@ -1258,6 +1288,9 @@ impl App {
                              self.state.open_overview_modal(title, content);
                          }
                      }
@@ -5022,10 +5204,11 @@ diff -ruN a/src/tui/app/mouse.rs b/src/tui/app/mouse.rs
                      FooterAction::StreamsTab => {
                          self.action_sender.send(Action::TabPane).ok();
                      }
-diff -ruN a/src/tui/app/navigation.rs b/src/tui/app/navigation.rs
---- a/src/tui/app/navigation.rs	2026-11-22 08:14:08.685161205 +0000
-+++ b/src/tui/app/navigation.rs	2026-11-22 08:14:08.694701843 +0000
-@@ -117,7 +117,6 @@
+diff --git a/src/tui/app/navigation.rs b/src/tui/app/navigation.rs
+index 3279bac..ea19349 100644
+--- a/src/tui/app/navigation.rs
++++ b/src/tui/app/navigation.rs
+@@ -117,7 +117,6 @@ impl App {
              || self.state.is_loading
              || self.state.search_results.is_empty()
              || self.state.active_browse_preset.is_some()
@@ -5033,7 +5216,7 @@ diff -ruN a/src/tui/app/navigation.rs b/src/tui/app/navigation.rs
              || self.state.search_query.trim().starts_with('/')
              || (!self.state.is_homepage_mode && self.state.search_exhausted)
          {
-@@ -143,6 +142,45 @@
+@@ -143,6 +142,45 @@ impl App {
                          page: next_page,
                      })
                      .ok();
@@ -5079,7 +5262,7 @@ diff -ruN a/src/tui/app/navigation.rs b/src/tui/app/navigation.rs
              } else {
                  let query = self.state.search_query.to_string();
                  let service = self.service.clone();
-@@ -298,6 +336,8 @@
+@@ -298,6 +336,8 @@ impl App {
                      pool.episode_index.insert((se, ep), streams.clone());
                  }
                  self.state.selected_resources.clear();
@@ -5088,7 +5271,7 @@ diff -ruN a/src/tui/app/navigation.rs b/src/tui/app/navigation.rs
                  self.state.is_loading = true;
                  self.state.is_fetching_streams = true;
                  self.state.set_status_short("Loading streams...");
-@@ -314,6 +354,8 @@
+@@ -314,6 +354,8 @@ impl App {
                      .ok();
              } else {
                  self.state.selected_resources.clear();
@@ -5097,7 +5280,7 @@ diff -ruN a/src/tui/app/navigation.rs b/src/tui/app/navigation.rs
                  self.state.is_loading = true;
                  self.state.is_fetching_streams = true;
                  self.state.set_status_short("Loading streams...");
-@@ -342,7 +384,18 @@
+@@ -342,7 +384,18 @@ impl App {
  
      pub(super) fn get_selected_release(&self) -> Option<Release> {
          let idx = self.state.resource_list_state.selected()?;
@@ -5117,7 +5300,7 @@ diff -ruN a/src/tui/app/navigation.rs b/src/tui/app/navigation.rs
      }
  }
  
-@@ -397,7 +450,25 @@
+@@ -397,7 +450,25 @@ impl App {
                      return None;
                  }
                  if !self.state.notifications.is_empty() {
@@ -5143,7 +5326,7 @@ diff -ruN a/src/tui/app/navigation.rs b/src/tui/app/navigation.rs
                      return None;
                  }
                  if self.state.favorites_focus {
-@@ -473,6 +544,8 @@
+@@ -473,6 +544,8 @@ impl App {
                  {
                      let next_id = dub.subject_id.clone();
                      self.state.selected_resources.clear();
@@ -5152,7 +5335,7 @@ diff -ruN a/src/tui/app/navigation.rs b/src/tui/app/navigation.rs
                      self.state.resource_list_state.select(None);
                      self.state.language_chosen = true;
                      self.state.language_list_state.select(Some(idx));
-@@ -653,7 +726,7 @@
+@@ -653,7 +726,7 @@ impl App {
                      Screen::Details => match self.state.details_pane {
                          crate::tui::state::DetailsPane::Streams => {
                              let current = self.state.resource_list_state.selected().unwrap_or(0);
@@ -5161,7 +5344,7 @@ diff -ruN a/src/tui/app/navigation.rs b/src/tui/app/navigation.rs
                                  self.state.resource_list_state.select(Some(current + 1));
                              }
                          }
-@@ -843,6 +916,8 @@
+@@ -843,6 +916,8 @@ impl App {
                          );
                          self.state.selected_details = Some(fallback_details);
                          self.state.selected_resources.clear();
@@ -5170,7 +5353,7 @@ diff -ruN a/src/tui/app/navigation.rs b/src/tui/app/navigation.rs
                          self.state.is_loading = true;
                          self.state.is_fetching_streams = false;
                          self.state.stream_error = None;
-@@ -927,6 +1002,8 @@
+@@ -927,6 +1002,8 @@ impl App {
                  MediaDetails::from_search_result(&item, self.state.search_preview.as_ref());
              self.state.selected_details = Some(fallback_details);
              self.state.selected_resources.clear();
@@ -5179,10 +5362,11 @@ diff -ruN a/src/tui/app/navigation.rs b/src/tui/app/navigation.rs
              self.state.is_loading = true;
              self.state.is_fetching_streams = false;
              self.state.stream_error = None;
-diff -ruN a/src/tui/app/playback.rs b/src/tui/app/playback.rs
---- a/src/tui/app/playback.rs	2026-11-22 08:14:08.685229386 +0000
-+++ b/src/tui/app/playback.rs	2026-11-22 08:14:08.694723947 +0000
-@@ -16,6 +16,63 @@
+diff --git a/src/tui/app/playback.rs b/src/tui/app/playback.rs
+index 4aeeeb9..ae31f62 100644
+--- a/src/tui/app/playback.rs
++++ b/src/tui/app/playback.rs
+@@ -16,6 +16,63 @@ pub(super) enum PlaybackResolution {
      NoPlayersInstalled,
  }
  
@@ -5246,7 +5430,7 @@ diff -ruN a/src/tui/app/playback.rs b/src/tui/app/playback.rs
  impl App {
      pub(super) fn resolve_playback_player(
          &self,
-@@ -575,7 +632,7 @@
+@@ -575,7 +632,7 @@ impl App {
                  }
              } else {
                  log::info!("launching player: {kind:?}");
@@ -5255,7 +5439,7 @@ diff -ruN a/src/tui/app/playback.rs b/src/tui/app/playback.rs
              };
  
              match spawn_result {
-@@ -584,12 +641,21 @@
+@@ -584,12 +641,21 @@ impl App {
                      let fallback_link = effective_link.clone();
                      let fallback_sub = effective_subtitle.clone();
                      let fallback_headers = headers.clone();
@@ -5278,7 +5462,7 @@ diff -ruN a/src/tui/app/playback.rs b/src/tui/app/playback.rs
                              Ok(status)
                                  if status.success()
                                      || is_vlc_normal_exit(
-@@ -693,6 +759,18 @@
+@@ -693,6 +759,18 @@ impl App {
                                  };
                                  #[cfg(not(unix))]
                                  let signal = None;
@@ -5297,7 +5481,7 @@ diff -ruN a/src/tui/app/playback.rs b/src/tui/app/playback.rs
                                  let clean_error =
                                      clean_player_error(status.code(), signal, error_output.trim());
                                  sender
-@@ -879,6 +957,57 @@
+@@ -879,6 +957,57 @@ impl App {
                              source_label: first_mirror.label.clone(),
                              max_height,
                          };
@@ -5355,7 +5539,7 @@ diff -ruN a/src/tui/app/playback.rs b/src/tui/app/playback.rs
                          let client = if release.provider == ProviderKind::Addons
                              || release.provider == ProviderKind::Dramachi
                              || release.provider == ProviderKind::BdixCircleFtp
-@@ -1113,11 +1242,17 @@
+@@ -1113,11 +1242,17 @@ impl App {
                  self.state.history.reconcile_pending_playback_states();
                  self.state.is_playing = false;
                  self.state.is_resolving_playback = false;
@@ -5373,7 +5557,7 @@ diff -ruN a/src/tui/app/playback.rs b/src/tui/app/playback.rs
                  let code_str = code
                      .map(|c| c.to_string())
                      .unwrap_or_else(|| "unknown".into());
-@@ -1205,6 +1340,55 @@
+@@ -1205,6 +1340,55 @@ impl App {
      }
  }
  
@@ -5429,7 +5613,7 @@ diff -ruN a/src/tui/app/playback.rs b/src/tui/app/playback.rs
  #[cfg(test)]
  mod tests {
      use super::clean_player_error;
-@@ -1845,4 +2029,49 @@
+@@ -1845,4 +2029,49 @@ mod tests {
              .expect("history item exists");
          assert_eq!(saved.progress_seconds, 420);
      }
@@ -5479,10 +5663,11 @@ diff -ruN a/src/tui/app/playback.rs b/src/tui/app/playback.rs
 +        assert!(prewarm_text.contains("Pre-buffering 50% (1.0 MB / 2.0 MB)"));
 +    }
  }
-diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
---- a/src/tui/app/requests.rs	2026-11-22 08:14:08.685325735 +0000
-+++ b/src/tui/app/requests.rs	2026-11-22 08:15:10.679735498 +0000
-@@ -257,6 +257,7 @@
+diff --git a/src/tui/app/requests.rs b/src/tui/app/requests.rs
+index 5f22bfe..8d52bed 100644
+--- a/src/tui/app/requests.rs
++++ b/src/tui/app/requests.rs
+@@ -257,6 +257,7 @@ impl App {
                  let manifest_url = target.manifest_url.clone();
                  let r_type = target.r#type.clone();
                  let cat_id = target.catalog_id.clone();
@@ -5490,7 +5675,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                  self.request_tasks.spawn_search(async move {
                      let result = service
                          .fetch_addon_catalog(&manifest_url, &r_type, &cat_id)
-@@ -275,7 +276,12 @@
+@@ -275,7 +276,12 @@ impl App {
                          }
                          Err(error) => {
                              sender
@@ -5504,7 +5689,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                                  .ok();
                          }
                      }
-@@ -416,9 +422,13 @@
+@@ -416,9 +422,13 @@ impl App {
  
                  if page <= 1 {
                      self.state.search_results = new_results;
@@ -5520,7 +5705,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                      self.state.search_results.extend(new_results);
                  }
                  if let Some(prev_id) = previous_selected_id {
-@@ -442,10 +452,21 @@
+@@ -442,10 +452,21 @@ impl App {
  
                  self.state
                      .set_status_default(if self.state.search_results.is_empty() {
@@ -5545,7 +5730,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                          )
                      } else {
                          format!(
-@@ -635,7 +656,9 @@
+@@ -635,7 +656,9 @@ impl App {
                      self.state.poster_protocol = None;
                      return None;
                  }
@@ -5556,7 +5741,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                      self.state.preview_loading = false;
                      self.state.search_preview = Some(cached.clone());
                      self.state.poster_image = None;
-@@ -1230,6 +1253,8 @@
+@@ -1230,6 +1253,8 @@ impl App {
                  self.state.is_fetching_streams = true;
                  self.state.has_streams_settled = false;
                  self.state.selected_resources.clear();
@@ -5565,7 +5750,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                  self.state.stream_error = None;
  
                  if force_refresh {
-@@ -1297,34 +1322,99 @@
+@@ -1297,34 +1322,99 @@ impl App {
                              return;
                          }
  
@@ -5615,8 +5800,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
 +                            },
 +                        )
 +                        .await;
- 
--                        if !blocked_addons.is_empty() {
++
 +                        sender
 +                            .send(Action::AddonStreamStatuses(
 +                                context,
@@ -5627,7 +5811,8 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
 +                                statuses,
 +                            ))
 +                            .ok();
-+
+ 
+-                        if !blocked_addons.is_empty() {
 +                        let failure_detail = (!failed_addons.is_empty()).then(|| {
 +                            failed_addons
 +                                .iter()
@@ -5684,7 +5869,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
  
                              sender
                                  .send(Action::EpisodeStreamsReady(
-@@ -1339,7 +1429,12 @@
+@@ -1339,7 +1429,12 @@ impl App {
                                      id,
                                      season,
                                      episode,
@@ -5698,7 +5883,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                                  ))
                                  .ok();
                          }
-@@ -1566,11 +1661,21 @@
+@@ -1566,11 +1661,21 @@ impl App {
                                  } else {
                                      !link.is_empty() && link == i_link
                                  };
@@ -5723,7 +5908,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                                          i.mirrors = item.mirrors.clone();
                                      }
                                      exists = true;
-@@ -1604,10 +1709,12 @@
+@@ -1604,10 +1709,12 @@ impl App {
                  }
  
                  let mut filtered = raw_list;
@@ -5738,7 +5923,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                      if let Some(subject_id) = &self.state.active_subject_id {
                          let id_clone = subject_id.clone();
                          let filtered_clone = filtered.clone();
-@@ -1623,12 +1730,21 @@
+@@ -1623,12 +1730,21 @@ impl App {
                      }
                  }
  
@@ -5761,7 +5946,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                      let saved_stream = self
                          .state
                          .active_subject_id
-@@ -1647,8 +1763,7 @@
+@@ -1647,8 +1763,7 @@ impl App {
                          })
                          .and_then(|item| item.stream_filename.as_deref());
                      if let Some(target_file) = saved_stream {
@@ -5771,7 +5956,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                              .iter()
                              .position(|r| r.filename == target_file)
                              .or(Some(0))
-@@ -1658,6 +1773,9 @@
+@@ -1658,6 +1773,9 @@ impl App {
                  } else {
                      None
                  };
@@ -5781,7 +5966,7 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
                  self.state.resource_list_state.select(preferred_stream_idx);
                  self.state
                      .set_status_default(format!("{} streams available.", count));
-@@ -1746,6 +1864,87 @@
+@@ -1746,6 +1864,87 @@ impl App {
                  }
              }
  
@@ -5869,10 +6054,11 @@ diff -ruN a/src/tui/app/requests.rs b/src/tui/app/requests.rs
              Action::EpisodeStreamsFailed(
                  context,
                  request_id,
-diff -ruN a/src/tui/app/run.rs b/src/tui/app/run.rs
---- a/src/tui/app/run.rs	2026-11-22 08:14:08.685396219 +0000
-+++ b/src/tui/app/run.rs	2026-11-22 08:14:08.694800508 +0000
-@@ -462,6 +462,8 @@
+diff --git a/src/tui/app/run.rs b/src/tui/app/run.rs
+index faa4ecc..4843cf1 100644
+--- a/src/tui/app/run.rs
++++ b/src/tui/app/run.rs
+@@ -462,6 +462,8 @@ impl App {
              | Action::PreviewFailure(..)
              | Action::FetchEpisodeStreams { .. }
              | Action::EpisodeStreamsReady(..)
@@ -5881,10 +6067,11 @@ diff -ruN a/src/tui/app/run.rs b/src/tui/app/run.rs
              | Action::EpisodeStreamsFailed(..)
              | Action::InitStreamPool(..)
              | Action::StreamPoolInitialized(..)
-diff -ruN a/src/tui/app/search.rs b/src/tui/app/search.rs
---- a/src/tui/app/search.rs	2026-11-22 08:14:08.685452692 +0000
-+++ b/src/tui/app/search.rs	2026-11-22 08:14:08.694820296 +0000
-@@ -156,7 +156,50 @@
+diff --git a/src/tui/app/search.rs b/src/tui/app/search.rs
+index ef713dd..bc1b883 100644
+--- a/src/tui/app/search.rs
++++ b/src/tui/app/search.rs
+@@ -156,7 +156,50 @@ impl App {
                          format!("Available in Streaming Mode ({ctrl_s})."),
                      );
                  } else {
@@ -5936,7 +6123,7 @@ diff -ruN a/src/tui/app/search.rs b/src/tui/app/search.rs
                  }
                  Some(true)
              }
-@@ -212,6 +255,8 @@
+@@ -212,6 +255,8 @@ impl App {
          self.state.active_subject_id = None;
          self.state.selected_details = None;
          self.state.selected_resources.clear();
@@ -5945,7 +6132,7 @@ diff -ruN a/src/tui/app/search.rs b/src/tui/app/search.rs
          self.state.is_loading = true;
          self.state.has_search_settled = false;
          self.state.search_error = None;
-@@ -238,10 +283,13 @@
+@@ -238,10 +283,13 @@ impl App {
          self.state.active_addon_catalog = Some(target.clone());
          self.state.browse_metrics.clear();
          self.state.current_page = 1;
@@ -5959,7 +6146,7 @@ diff -ruN a/src/tui/app/search.rs b/src/tui/app/search.rs
          self.state.is_loading = true;
          self.state.has_search_settled = false;
          self.state.search_error = None;
-@@ -378,7 +426,9 @@
+@@ -378,7 +426,9 @@ impl App {
      ) {
          self.request_tasks.cancel_details();
          let request_id = self.state.active_details_request;
@@ -5970,10 +6157,11 @@ diff -ruN a/src/tui/app/search.rs b/src/tui/app/search.rs
              if let Some(cached) = self.state.preview_cache.get(&id).cloned() {
                  self.action_sender
                      .send(Action::DetailsSuccess(
-diff -ruN a/src/tui/app/system.rs b/src/tui/app/system.rs
---- a/src/tui/app/system.rs	2026-11-22 08:14:08.685512235 +0000
-+++ b/src/tui/app/system.rs	2026-11-22 08:15:10.680318157 +0000
-@@ -8,6 +8,7 @@
+diff --git a/src/tui/app/system.rs b/src/tui/app/system.rs
+index 3b0bec3..5b9cff9 100644
+--- a/src/tui/app/system.rs
++++ b/src/tui/app/system.rs
+@@ -8,6 +8,7 @@ impl App {
                  let mut needs_redraw = (self.state.is_loading && self.state.tick_count % 5 == 0)
                      || self.state.tick_count < 15;
                  self.state.tick_count = self.state.tick_count.wrapping_add(1);
@@ -5981,7 +6169,7 @@ diff -ruN a/src/tui/app/system.rs b/src/tui/app/system.rs
                  if !self.state.notifications.is_empty() {
                      needs_redraw = true;
                      self.state.expire_notifications();
-@@ -76,7 +77,11 @@
+@@ -76,7 +77,11 @@ impl App {
                                  found_cached = true;
                                  let count = cached.len();
                                  self.state.selected_resources = cached.clone();
@@ -5993,7 +6181,7 @@ diff -ruN a/src/tui/app/system.rs b/src/tui/app/system.rs
                                  let preferred_stream_idx = if count > 0 {
                                      let provider_key =
                                          self.provider_for_subject(&subject_id).cache_key();
-@@ -184,6 +189,12 @@
+@@ -184,6 +189,12 @@ impl App {
                              .send(Action::FetchHomepage { tab_id, page: 1 })
                              .ok();
                      } else if let Some(catalog) = self.state.active_addon_catalog.clone() {
@@ -6006,10 +6194,11 @@ diff -ruN a/src/tui/app/system.rs b/src/tui/app/system.rs
                          self.action_sender
                              .send(Action::SelectAddonCatalog(catalog))
                              .ok();
-diff -ruN a/src/tui/commands.rs b/src/tui/commands.rs
---- a/src/tui/commands.rs	2026-11-22 08:14:08.685615234 +0000
-+++ b/src/tui/commands.rs	2026-11-22 08:14:08.694872480 +0000
-@@ -77,6 +77,33 @@
+diff --git a/src/tui/commands.rs b/src/tui/commands.rs
+index 9994497..05347f6 100644
+--- a/src/tui/commands.rs
++++ b/src/tui/commands.rs
+@@ -77,6 +77,33 @@ impl SlashCommand {
          let lower = query.to_ascii_lowercase();
          let mut results = Vec::new();
  
@@ -6043,7 +6232,7 @@ diff -ruN a/src/tui/commands.rs b/src/tui/commands.rs
          for cmd in Self::ALL {
              let name = cmd.name();
              if !cmd.is_available(state) {
-@@ -97,6 +124,10 @@
+@@ -97,6 +124,10 @@ impl SlashCommand {
              return None;
          };
  
@@ -6054,10 +6243,11 @@ diff -ruN a/src/tui/commands.rs b/src/tui/commands.rs
          match trimmed {
              "/settings" => Some(Self::Settings.description(state)),
              "/config" => Some(Self::Config.description(state)),
-diff -ruN a/src/tui/overlay.rs b/src/tui/overlay.rs
---- a/src/tui/overlay.rs	2026-11-22 08:14:08.685730125 +0000
-+++ b/src/tui/overlay.rs	2026-11-22 08:14:08.694885724 +0000
-@@ -557,6 +557,22 @@
+diff --git a/src/tui/overlay.rs b/src/tui/overlay.rs
+index 09039ff..cf6b121 100644
+--- a/src/tui/overlay.rs
++++ b/src/tui/overlay.rs
+@@ -557,6 +557,22 @@ fn compute_notification_cards<'a>(
      cards
  }
  
@@ -6080,7 +6270,7 @@ diff -ruN a/src/tui/overlay.rs b/src/tui/overlay.rs
  pub fn notifications(
      frame: &mut Frame,
      area: Rect,
-@@ -584,26 +600,32 @@
+@@ -584,26 +600,32 @@ pub fn notifications(
              )]));
          }
  
@@ -6132,10 +6322,11 @@ diff -ruN a/src/tui/overlay.rs b/src/tui/overlay.rs
          };
  
          let block = Block::default()
-diff -ruN a/src/tui/screens/details.rs b/src/tui/screens/details.rs
---- a/src/tui/screens/details.rs	2026-11-22 08:14:08.685813749 +0000
-+++ b/src/tui/screens/details.rs	2026-11-22 08:14:08.694963599 +0000
-@@ -10,7 +10,7 @@
+diff --git a/src/tui/screens/details.rs b/src/tui/screens/details.rs
+index 6ad09d3..8f72ef6 100644
+--- a/src/tui/screens/details.rs
++++ b/src/tui/screens/details.rs
+@@ -10,7 +10,7 @@ use crate::tui::{
  use ratatui::{
      Frame,
      layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -6144,7 +6335,7 @@ diff -ruN a/src/tui/screens/details.rs b/src/tui/screens/details.rs
      text::{Line, Span},
      widgets::{Block, Borders, Paragraph, Wrap},
  };
-@@ -327,6 +327,202 @@
+@@ -327,6 +327,202 @@ fn compute_synopsis_area(
      Rect::new(meta_area.x, abs_y, meta_area.width, height)
  }
  
@@ -6347,7 +6538,7 @@ diff -ruN a/src/tui/screens/details.rs b/src/tui/screens/details.rs
  pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme) {
      let modal_active = state.has_active_modal();
      let layout = details_screen_layout(area, state.selected_details.as_ref());
-@@ -919,9 +1115,16 @@
+@@ -919,9 +1115,16 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme)
          (max_visible_items.min(max_rows) as u16) + 2
      };
  
@@ -6366,7 +6557,7 @@ diff -ruN a/src/tui/screens/details.rs b/src/tui/screens/details.rs
          Constraint::Length(capped)
      } else {
          Constraint::Min(3)
-@@ -1225,10 +1428,11 @@
+@@ -1225,10 +1428,11 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme)
      let (streams_border, streams_title_style, streams_highlight_style, streams_highlight_symbol) =
          pane_styles(streams_focused, modal_active, state.basic_terminal, theme);
  
@@ -6380,7 +6571,22 @@ diff -ruN a/src/tui/screens/details.rs b/src/tui/screens/details.rs
          let selected = state
              .resource_list_state
              .selected()
-@@ -1384,7 +1588,19 @@
+@@ -1351,7 +1555,13 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme)
+             .iter()
+             .enumerate()
+             .map(|(i, file)| {
+-                let resolution = file.resolution_i64();
++                let resolution = if file.provider == crate::providers::models::ProviderKind::Addons
++                    && file.quality.is_none()
++                {
++                    0
++                } else {
++                    file.resolution_i64()
++                };
+                 let codec = file.codec.as_deref().unwrap_or("None");
+ 
+                 let size_formatted = file
+@@ -1384,7 +1594,19 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme)
                      metadata_style(theme)
                  };
  
@@ -6401,7 +6607,7 @@ diff -ruN a/src/tui/screens/details.rs b/src/tui/screens/details.rs
                  let is_redundant_source = {
                      let l = clean_source.to_ascii_lowercase();
                      let parts: Vec<&str> = l
-@@ -1507,18 +1723,40 @@
+@@ -1507,18 +1729,40 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme)
              })
              .collect();
  
@@ -6449,7 +6655,7 @@ diff -ruN a/src/tui/screens/details.rs b/src/tui/screens/details.rs
              selected_idx.unwrap_or(0),
              theme,
              state.basic_terminal,
-@@ -1536,7 +1774,30 @@
+@@ -1536,7 +1780,30 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme)
              || state.pending_episode_fetch.is_some()
              || !state.has_streams_settled;
  
@@ -6481,7 +6687,7 @@ diff -ruN a/src/tui/screens/details.rs b/src/tui/screens/details.rs
              "Choose an audio track to load streams.".to_string()
          } else if let Some(error) = &state.stream_error {
              if error.contains("No stream sources") || error.contains("No streams available") {
-@@ -1577,14 +1838,33 @@
+@@ -1577,14 +1844,33 @@ pub fn draw(frame: &mut Frame, area: Rect, state: &mut AppState, theme: &Theme)
          } else {
              theme.text_dim
          };
@@ -6523,7 +6729,7 @@ diff -ruN a/src/tui/screens/details.rs b/src/tui/screens/details.rs
      }
  
      let (mut primary_footer, secondary_footer) =
-@@ -2039,7 +2319,9 @@
+@@ -2039,7 +2325,9 @@ fn details_footer(
      }
  
      let mut secondary = Vec::new();
@@ -6534,7 +6740,7 @@ diff -ruN a/src/tui/screens/details.rs b/src/tui/screens/details.rs
          secondary.extend(footer_group("Tab", "Streams", false, theme, modal_active));
      }
      secondary.extend(footer_group("f", fav_label, false, theme, modal_active));
-@@ -3793,4 +4075,124 @@
+@@ -3793,4 +4081,124 @@ mod tests {
          assert!(content.contains("complete movie summary rendered"));
          assert!(!content.contains("[Esc] Close"));
      }
@@ -6659,10 +6865,11 @@ diff -ruN a/src/tui/screens/details.rs b/src/tui/screens/details.rs
 +        assert!(rendered.contains("BrokenAddon (!)"));
 +    }
  }
-diff -ruN a/src/tui/screens/home.rs b/src/tui/screens/home.rs
---- a/src/tui/screens/home.rs	2026-11-22 08:14:08.686169834 +0000
-+++ b/src/tui/screens/home.rs	2026-11-22 08:14:08.695031463 +0000
-@@ -3101,6 +3101,7 @@
+diff --git a/src/tui/screens/home.rs b/src/tui/screens/home.rs
+index 327ba8b..97c1749 100644
+--- a/src/tui/screens/home.rs
++++ b/src/tui/screens/home.rs
+@@ -3101,6 +3101,7 @@ mod tests {
                      provides_stream: false,
                      id_prefixes: vec![],
                      types: vec![],
@@ -6670,7 +6877,7 @@ diff -ruN a/src/tui/screens/home.rs b/src/tui/screens/home.rs
                  },
                  crate::providers::addons::models::InstalledAddon {
                      manifest_url: "https://x2".into(),
-@@ -3113,6 +3114,7 @@
+@@ -3113,6 +3114,7 @@ mod tests {
                      provides_stream: false,
                      id_prefixes: vec![],
                      types: vec![],
@@ -6678,7 +6885,7 @@ diff -ruN a/src/tui/screens/home.rs b/src/tui/screens/home.rs
                  },
                  crate::providers::addons::models::InstalledAddon {
                      manifest_url: "https://x3".into(),
-@@ -3125,6 +3127,7 @@
+@@ -3125,6 +3127,7 @@ mod tests {
                      provides_stream: false,
                      id_prefixes: vec![],
                      types: vec![],
@@ -6686,10 +6893,11 @@ diff -ruN a/src/tui/screens/home.rs b/src/tui/screens/home.rs
                  },
              ],
              addon_manager_selected: 2,
-diff -ruN a/src/tui/state.rs b/src/tui/state.rs
---- a/src/tui/state.rs	2026-11-22 08:14:08.686306257 +0000
-+++ b/src/tui/state.rs	2026-11-22 08:14:08.695083319 +0000
-@@ -182,6 +182,8 @@
+diff --git a/src/tui/state.rs b/src/tui/state.rs
+index 87033f8..94dac61 100644
+--- a/src/tui/state.rs
++++ b/src/tui/state.rs
+@@ -182,6 +182,8 @@ pub struct AppState {
      pub selected_details: Option<MediaDetails>,
      pub active_subject_id: Option<String>,
      pub selected_resources: Vec<Release>,
@@ -6698,7 +6906,7 @@ diff -ruN a/src/tui/state.rs b/src/tui/state.rs
      pub stream_pool: std::collections::HashMap<String, SubjectStreamPool>,
      pub fetch_cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
      pub is_waiting_for_download_stream: bool,
-@@ -360,6 +362,8 @@
+@@ -360,6 +362,8 @@ impl Default for AppState {
              selected_details: None,
              active_subject_id: None,
              selected_resources: vec![],
@@ -6707,7 +6915,7 @@ diff -ruN a/src/tui/state.rs b/src/tui/state.rs
              stream_pool: std::collections::HashMap::new(),
              fetch_cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
              is_waiting_for_download_stream: false,
-@@ -534,6 +538,8 @@
+@@ -534,6 +538,8 @@ impl AppState {
          self.pending_playback_source = None;
          self.selected_details = None;
          self.selected_resources.clear();
@@ -6716,7 +6924,7 @@ diff -ruN a/src/tui/state.rs b/src/tui/state.rs
          self.active_subject_id = None;
          self.available_seasons.clear();
          self.available_episode_numbers.clear();
-@@ -684,20 +690,67 @@
+@@ -684,20 +690,67 @@ impl AppState {
              return;
          }
  
@@ -6794,7 +7002,7 @@ diff -ruN a/src/tui/state.rs b/src/tui/state.rs
      pub fn expire_notifications(&mut self) {
          self.notifications
              .retain(|notification| !notification.expired());
-@@ -846,6 +899,8 @@
+@@ -846,6 +899,8 @@ impl AppState {
          self.active_subject_id = None;
          self.selected_details = None;
          self.selected_resources.clear();
@@ -6803,7 +7011,7 @@ diff -ruN a/src/tui/state.rs b/src/tui/state.rs
          self.is_fetching_streams = false;
          self.pending_episode_fetch = None;
          self.auto_play_on_ready = false;
-@@ -861,6 +916,106 @@
+@@ -861,6 +916,106 @@ impl AppState {
          self.has_streams_settled = false;
      }
  
@@ -6910,10 +7118,11 @@ diff -ruN a/src/tui/state.rs b/src/tui/state.rs
      pub fn favorites_available(&self) -> bool {
          self.streaming_enabled && !self.is_tv_mode
      }
-@@ -1506,6 +1661,39 @@
+@@ -1505,6 +1660,39 @@ mod tests {
+         assert!(state.favorites_landing_visible());
      }
  
-     #[test]
++    #[test]
 +    fn test_sticky_notification_does_not_expire_or_get_evicted() {
 +        use crate::tui::overlay::NotificationKind::Info;
 +        let mut state = AppState::default();
@@ -6946,11 +7155,10 @@ diff -ruN a/src/tui/state.rs b/src/tui/state.rs
 +        assert!(!state.has_sticky_notification("Torrent running"));
 +    }
 +
-+    #[test]
+     #[test]
      fn test_notify_replaces_same_category_in_place() {
          let mut state = AppState::default();
-         state.notify(
-@@ -1609,4 +1797,30 @@
+@@ -1609,4 +1797,30 @@ mod tests {
          assert!(state.poster_image.is_none());
          assert!(state.poster_protocol.is_none());
      }
@@ -6981,10 +7189,11 @@ diff -ruN a/src/tui/state.rs b/src/tui/state.rs
 +        assert_eq!(names, ["Big", "Mid", "Small", "Slow", "Empty", "Broken"]);
 +    }
  }
-diff -ruN a/tests/addons_manifest.rs b/tests/addons_manifest.rs
---- a/tests/addons_manifest.rs	2026-11-22 08:14:08.687754838 +0000
-+++ b/tests/addons_manifest.rs	2026-11-22 08:15:21.321436950 +0000
-@@ -117,6 +117,7 @@
+diff --git a/tests/addons_manifest.rs b/tests/addons_manifest.rs
+index 6f3eb39..9e63399 100644
+--- a/tests/addons_manifest.rs
++++ b/tests/addons_manifest.rs
+@@ -117,6 +117,7 @@ fn test_addon_episode_stream_filtering_and_isolation() {
              description: None,
              url: Some("https://cdn.example.com/s01e08_1080p.mp4".to_string()),
              behavior_hints: None,
@@ -6992,7 +7201,7 @@ diff -ruN a/tests/addons_manifest.rs b/tests/addons_manifest.rs
          },
          StreamItem {
              name: Some("HdHub\n1080p".to_string()),
-@@ -124,6 +125,7 @@
+@@ -124,6 +125,7 @@ fn test_addon_episode_stream_filtering_and_isolation() {
              description: None,
              url: Some("https://cdn.example.com/s01e06_1080p.mp4".to_string()),
              behavior_hints: None,
@@ -7000,7 +7209,7 @@ diff -ruN a/tests/addons_manifest.rs b/tests/addons_manifest.rs
          },
          StreamItem {
              name: Some("HdHub\n720p".to_string()),
-@@ -131,6 +133,7 @@
+@@ -131,6 +133,7 @@ fn test_addon_episode_stream_filtering_and_isolation() {
              description: None,
              url: Some("https://cdn.example.com/s01e08_720p.mp4".to_string()),
              behavior_hints: None,
@@ -7008,7 +7217,7 @@ diff -ruN a/tests/addons_manifest.rs b/tests/addons_manifest.rs
          },
          StreamItem {
              name: Some("HdHub\n720p".to_string()),
-@@ -138,6 +141,7 @@
+@@ -138,6 +141,7 @@ fn test_addon_episode_stream_filtering_and_isolation() {
              description: None,
              url: Some("https://cdn.example.com/s01e07_720p.mp4".to_string()),
              behavior_hints: None,
@@ -7016,7 +7225,7 @@ diff -ruN a/tests/addons_manifest.rs b/tests/addons_manifest.rs
          },
      ];
  
-@@ -184,6 +188,7 @@
+@@ -184,6 +188,7 @@ fn test_addon_movie_stream_resolution_remains_unaffected() {
          description: None,
          url: Some("https://cdn.example.com/inception_1080p.mp4".to_string()),
          behavior_hints: None,
@@ -7024,7 +7233,7 @@ diff -ruN a/tests/addons_manifest.rs b/tests/addons_manifest.rs
      };
  
      let release = stream_item_to_release("Cinemeta", &movie_stream, 0, 0)
-@@ -217,6 +222,7 @@
+@@ -217,6 +222,7 @@ fn test_addon_stream_parsing_and_release_mapping() {
              video_size: Some(1_234_567_890),
              filename: Some("Breaking.Bad.S01E01.1080p.mkv".to_string()),
          }),
@@ -7032,7 +7241,7 @@ diff -ruN a/tests/addons_manifest.rs b/tests/addons_manifest.rs
      };
  
      let release = stream_item_to_release("HdHub", &stream, 1, 1).expect("valid release");
-@@ -291,10 +297,59 @@
+@@ -291,10 +297,59 @@ fn test_installed_addon_cinemeta_protection() {
          provides_stream: true,
          id_prefixes: vec!["tt".to_string()],
          types: vec!["movie".to_string(), "series".to_string()],
@@ -7092,7 +7301,7 @@ diff -ruN a/tests/addons_manifest.rs b/tests/addons_manifest.rs
  #[tokio::test]
  async fn test_invalid_addon_manifest_url_shows_actionable_error_and_preserves_state() {
      let client = moviebox_tui::providers::addons::client::AddonClient::new();
-@@ -319,7 +374,7 @@
+@@ -319,7 +374,7 @@ async fn test_invalid_addon_manifest_url_shows_actionable_error_and_preserves_st
  }
  
  #[test]
@@ -7101,7 +7310,7 @@ diff -ruN a/tests/addons_manifest.rs b/tests/addons_manifest.rs
      let raw_streams = vec![
          StreamItem {
              name: Some("HTTP 1080p Stream".to_string()),
-@@ -327,6 +382,7 @@
+@@ -327,6 +382,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
              description: None,
              url: Some("https://example.test/stream1.mp4".to_string()),
              behavior_hints: None,
@@ -7109,7 +7318,7 @@ diff -ruN a/tests/addons_manifest.rs b/tests/addons_manifest.rs
          },
          StreamItem {
              name: Some("HTTP 720p Stream".to_string()),
-@@ -334,6 +390,7 @@
+@@ -334,6 +390,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
              description: None,
              url: Some("http://example.test/stream2.mp4".to_string()),
              behavior_hints: None,
@@ -7117,7 +7326,7 @@ diff -ruN a/tests/addons_manifest.rs b/tests/addons_manifest.rs
          },
          StreamItem {
              name: Some("Magnet Link".to_string()),
-@@ -341,6 +398,7 @@
+@@ -341,6 +398,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
              description: None,
              url: Some("magnet:?xt=urn:btih:d08244124e9f0863014f56947ab51404ec102770".to_string()),
              behavior_hints: None,
@@ -7125,7 +7334,7 @@ diff -ruN a/tests/addons_manifest.rs b/tests/addons_manifest.rs
          },
          StreamItem {
              name: Some("Local File".to_string()),
-@@ -348,6 +406,7 @@
+@@ -348,6 +406,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
              description: None,
              url: Some("file:///etc/passwd".to_string()),
              behavior_hints: None,
@@ -7133,7 +7342,7 @@ diff -ruN a/tests/addons_manifest.rs b/tests/addons_manifest.rs
          },
          StreamItem {
              name: Some("FTP Stream".to_string()),
-@@ -355,6 +414,7 @@
+@@ -355,6 +414,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
              description: None,
              url: Some("ftp://example.test/video.mkv".to_string()),
              behavior_hints: None,
@@ -7141,7 +7350,7 @@ diff -ruN a/tests/addons_manifest.rs b/tests/addons_manifest.rs
          },
          StreamItem {
              name: Some("Invalid".to_string()),
-@@ -362,6 +422,7 @@
+@@ -362,6 +422,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
              description: None,
              url: Some("not-a-valid-url-string".to_string()),
              behavior_hints: None,
@@ -7149,7 +7358,7 @@ diff -ruN a/tests/addons_manifest.rs b/tests/addons_manifest.rs
          },
          StreamItem {
              name: Some("Empty".to_string()),
-@@ -369,6 +430,7 @@
+@@ -369,6 +430,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
              description: None,
              url: None,
              behavior_hints: None,
@@ -7157,7 +7366,7 @@ diff -ruN a/tests/addons_manifest.rs b/tests/addons_manifest.rs
          },
      ];
  
-@@ -379,7 +441,9 @@
+@@ -379,7 +441,9 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
          }
      }
  
@@ -7168,7 +7377,7 @@ diff -ruN a/tests/addons_manifest.rs b/tests/addons_manifest.rs
      assert_eq!(
          accepted_releases[0].mirrors[0].resolver_url,
          "https://example.test/stream1.mp4"
-@@ -388,6 +452,15 @@
+@@ -388,6 +452,15 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
          accepted_releases[1].mirrors[0].resolver_url,
          "http://example.test/stream2.mp4"
      );
@@ -7184,7 +7393,7 @@ diff -ruN a/tests/addons_manifest.rs b/tests/addons_manifest.rs
  }
  
  #[tokio::test]
-@@ -424,3 +497,27 @@
+@@ -424,3 +497,27 @@ async fn test_addon_enable_disable_and_removal_lifecycle() {
          .await;
      assert_eq!(app.state().installed_addons.len(), initial_count);
  }
