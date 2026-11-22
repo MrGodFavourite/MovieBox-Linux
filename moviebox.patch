@@ -11,18 +11,9 @@ index cd429d8..58f411d 100644
  [lib]
  name = "moviebox_tui"
 diff --git a/docs/addons-mode.md b/docs/addons-mode.md
-index 63c8e56..2704d31 100644
+index 63c8e56..24d55f2 100644
 --- a/docs/addons-mode.md
 +++ b/docs/addons-mode.md
-@@ -6,7 +6,7 @@ MovieBox-TUI supports Stremio HTTP addons. You can install standard addon manife
- 
- - **Switch to Addons**: Press `Ctrl+P` on the home screen until `[Addons]` is selected.
- - **Open Addon Manager**: Type `/config` or click `[Addons]` in the search bar.
--- **Browse Catalogs**: Type `/browse` to view Top Movies, Top Series, and curated lists.
-+- **Browse Catalogs**: Type `/browse` (or `/browse <catalog>`, e.g. `/browse top rated`) to browse Cinemeta catalogs (Top Movies, Top Series, Top Rated Movies, Top Rated Series) with automatic pagination.
- - **Search**: Type in the search bar to search titles across installed addons.
- 
- ## Addon Manager
 @@ -21,9 +21,42 @@ The Addon Manager lets you add, enable, or remove addon manifests:
  ## Supported Streams
  
@@ -67,7 +58,7 @@ index 63c8e56..2704d31 100644
  
  Installed addons are saved to `addons_config.json` in your configuration directory:
 diff --git a/src/cache.rs b/src/cache.rs
-index 2b27e09..e24929d 100644
+index 2b27e09..5d69ce3 100644
 --- a/src/cache.rs
 +++ b/src/cache.rs
 @@ -10,6 +10,11 @@ use std::path::{Path, PathBuf};
@@ -156,20 +147,8 @@ index 2b27e09..e24929d 100644
  }
  
  pub fn get_homepage_path(tab_id: &str, page: usize) -> PathBuf {
-@@ -475,6 +487,11 @@ pub fn set_addon_catalog_cache_typed(
-     set_typed_cache(&path, HOMEPAGE_CACHE_EXPIRY_SECS, items);
- }
- 
-+pub fn invalidate_addon_catalog_cache(manifest_url: &str, r_type: &str, catalog_id: &str) {
-+    let path = get_addon_catalog_path(manifest_url, r_type, catalog_id);
-+    let _ = fs::remove_file(path);
-+}
-+
- pub fn get_addon_manifest_path(manifest_url: &str) -> PathBuf {
-     let mut path = get_provider_cache_dir(ProviderKind::Addons, "manifests");
-     let hashed = md5_hex(manifest_url);
 diff --git a/src/config.rs b/src/config.rs
-index e0e78d6..372f341 100644
+index e0e78d6..480d5f7 100644
 --- a/src/config.rs
 +++ b/src/config.rs
 @@ -267,6 +267,49 @@ pub fn load() -> Config {
@@ -222,24 +201,6 @@ index e0e78d6..372f341 100644
  pub fn save(config: &Config) {
      let Some(path) = config_path() else {
          return;
-@@ -317,6 +360,17 @@ pub fn load_addons() -> Vec<InstalledAddon> {
-             }
-         }
-     }
-+    for a in &mut list {
-+        if a.provides_catalog && a.catalogs.is_empty() && !a.is_core() {
-+            let norm =
-+                crate::providers::addons::AddonClient::normalize_manifest_url(&a.manifest_url);
-+            if let Some(cached) = crate::cache::get_addon_manifest_cache_typed(&norm)
-+                && !cached.catalogs.is_empty()
-+            {
-+                a.catalogs = cached.catalogs;
-+            }
-+        }
-+    }
-     list
- }
- 
 diff --git a/src/download.rs b/src/download.rs
 index 03da668..d829066 100644
 --- a/src/download.rs
@@ -791,7 +752,7 @@ index d4335ff..e55f14c 100644
      fn test_meta_to_catalog_item() {
          let item = MetaItem {
 diff --git a/src/providers/addons/aggregator.rs b/src/providers/addons/aggregator.rs
-index 30f4f37..0ebc27c 100644
+index 30f4f37..6ad11d9 100644
 --- a/src/providers/addons/aggregator.rs
 +++ b/src/providers/addons/aggregator.rs
 @@ -1,7 +1,12 @@
@@ -1290,23 +1251,7 @@ index 30f4f37..0ebc27c 100644
                  ]}"#;
                  let resp = format!(
                      "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-@@ -207,6 +486,7 @@ mod tests {
-                 provides_stream: true,
-                 id_prefixes: vec![],
-                 types: vec!["movie".to_string()],
-+                catalogs: vec![],
-             },
-             InstalledAddon {
-                 manifest_url: format!("http://{addr2}/manifest.json"),
-@@ -219,6 +499,7 @@ mod tests {
-                 provides_stream: true,
-                 id_prefixes: vec![],
-                 types: vec!["movie".to_string()],
-+                catalogs: vec![],
-             },
-         ];
- 
-@@ -231,6 +512,137 @@ mod tests {
+@@ -231,6 +510,137 @@ mod tests {
          assert_eq!(releases[1].quality.as_deref(), Some("720p"));
      }
  
@@ -1444,7 +1389,7 @@ index 30f4f37..0ebc27c 100644
      #[test]
      fn test_clean_addon_subject_id_preserves_namespaces() {
          assert_eq!(clean_addon_subject_id("series:kitsu:12345"), "kitsu:12345");
-@@ -239,4 +651,17 @@ mod tests {
+@@ -239,4 +649,17 @@ mod tests {
          assert_eq!(clean_addon_subject_id("movie:tt1234567"), "tt1234567");
          assert_eq!(clean_addon_subject_id("tt1234567"), "tt1234567");
      }
@@ -1877,7 +1822,7 @@ index 131f001..d405adb 100644
 +    }
 +}
 diff --git a/src/providers/addons/mod.rs b/src/providers/addons/mod.rs
-index 6d7af7f..f6fa808 100644
+index 6d7af7f..b57cc2d 100644
 --- a/src/providers/addons/mod.rs
 +++ b/src/providers/addons/mod.rs
 @@ -2,12 +2,18 @@ pub mod adapter;
@@ -1900,90 +1845,7 @@ index 6d7af7f..f6fa808 100644
  pub use client::AddonClient;
  pub use models::{AddonManifest, InstalledAddon, MetaDetail, MetaItem, StreamItem};
  
-@@ -33,41 +39,59 @@ impl Provider for AddonClient {
-         let addons = tokio::task::spawn_blocking(crate::config::load_addons)
-             .await
-             .unwrap_or_default();
--        let catalog_addons: Vec<_> = addons
--            .iter()
--            .filter(|a| a.enabled && (a.provides_meta || a.provides_catalog))
--            .collect();
-+        let targets = search_targets(&addons);
- 
--        if catalog_addons.is_empty() {
-+        if targets.is_empty() {
-             return Err(ProviderError::Unavailable(
--                "No catalog/metadata addon enabled. Open /config to configure one.".to_string(),
-+                "No searchable catalog addon enabled. Open /config to configure one.".to_string(),
-             ));
-         }
- 
--        let mut combined = Vec::new();
--        for addon in catalog_addons {
--            let base_url = Self::base_addon_url(&addon.manifest_url);
--            let (movies_res, series_res) = tokio::join!(
--                self.fetch_catalog_search(&base_url, "movie", "top", query),
--                self.fetch_catalog_search(&base_url, "series", "top", query),
--            );
--            if let Ok(movies) = movies_res {
--                combined.extend(movies);
--            }
--            if let Ok(series) = series_res {
--                combined.extend(series);
--            }
--            if !combined.is_empty() {
--                break;
-+        // Ask every searchable catalog at once, using the catalog ids and types
-+        // each addon declares (e.g. CNCVerse Bridge uses its own ids and the
-+        // type "other"), so one slow or blocked addon cannot hide the others.
-+        let lookups = targets.iter().map(move |target| async move {
-+            let res = self
-+                .fetch_catalog_search(
-+                    &target.base_url,
-+                    &target.r#type,
-+                    &target.catalog_id,
-+                    query,
-+                )
-+                .await;
-+            (target.addon.as_str(), res)
-+        });
-+        let results = futures::future::join_all(lookups).await;
-+
-+        let mut combined: Vec<MetaItem> = Vec::new();
-+        let mut failures: Vec<String> = Vec::new();
-+        for (addon_name, res) in results {
-+            match res {
-+                Ok(items) => combined.extend(items),
-+                Err(e) => {
-+                    let msg = format!("{addon_name}: {e}");
-+                    if !failures.contains(&msg) {
-+                        failures.push(msg);
-+                    }
-+                }
-             }
-         }
- 
-         let mut seen = std::collections::HashSet::new();
--        Ok(combined
-+        let items: Vec<CatalogItem> = combined
-             .into_iter()
-             .filter(|m| seen.insert(m.id.clone()))
-             .map(|m| adapter::meta_to_catalog_item(&m))
--            .collect())
-+            .collect();
-+
-+        if items.is_empty() && !failures.is_empty() {
-+            let mut shown: Vec<String> = failures.iter().take(3).cloned().collect();
-+            if failures.len() > 3 {
-+                shown.push(format!("and {} more", failures.len() - 3));
-+            }
-+            return Err(ProviderError::Unavailable(shown.join("; ")));
-+        }
-+        Ok(items)
-     }
- 
-     async fn details(&self, id: &str) -> Result<MediaDetails, ProviderError> {
-@@ -111,42 +135,68 @@ impl Provider for AddonClient {
+@@ -111,42 +117,68 @@ impl Provider for AddonClient {
              vec!["series", "movie", "tv", "anime", "other"]
          };
  
@@ -2038,11 +1900,11 @@ index 6d7af7f..f6fa808 100644
 +                        && d.r#type.eq_ignore_ascii_case("movie");
 +                    if series_like || movie_match {
 +                        return (Some(d), true);
-+                    }
+                     }
 +                    if fallback.is_none() {
 +                        fallback = Some(d);
-                     }
-                 }
++                    }
++                }
 +                (fallback, false)
 +            }
 +        });
@@ -2056,10 +1918,9 @@ index 6d7af7f..f6fa808 100644
 +                primaries.push(d);
 +            } else if best_fallback.is_none() {
 +                best_fallback = Some(d);
-             }
-         }
- 
--        if let Some(d) = best_detail {
++            }
++        }
++
 +        // Base = the addon with the most episodes. Episodes the others have and
 +        // the base lacks (e.g. a brand-new season) are added on top of it.
 +        let mut best_primary: Option<models::MetaDetail> = None;
@@ -2068,73 +1929,22 @@ index 6d7af7f..f6fa808 100644
 +            for (i, d) in primaries.iter().enumerate() {
 +                if d.videos.len() > primaries[base_idx].videos.len() {
 +                    base_idx = i;
-+                }
-+            }
+                 }
+             }
 +            let mut base = primaries.remove(base_idx);
 +            merge_meta_videos(&mut base, &primaries);
 +            best_primary = Some(base);
-+        }
-+
+         }
+ 
+-        if let Some(d) = best_detail {
 +        if let Some(d) = best_primary.or(best_fallback) {
              let mut details = adapter::meta_detail_to_media_details(&d);
              if let Some(hint) = &type_hint {
                  details.id.value = format!("{hint}:{clean_id}");
-@@ -157,3 +207,90 @@ impl Provider for AddonClient {
+@@ -157,3 +189,38 @@ impl Provider for AddonClient {
          Err(ProviderError::NotFound)
      }
  }
-+
-+const MAX_SEARCH_TARGETS: usize = 40;
-+
-+struct SearchTarget {
-+    addon: String,
-+    base_url: String,
-+    r#type: String,
-+    catalog_id: String,
-+}
-+
-+/// Catalogs worth searching: those an addon declares with a `search` extra.
-+/// Cinemeta keeps its built-in `top` catalogs. Addons without a real
-+/// searchable catalog are skipped instead of being sent made-up requests.
-+fn search_targets(addons: &[InstalledAddon]) -> Vec<SearchTarget> {
-+    let mut targets: Vec<SearchTarget> = Vec::new();
-+    for addon in addons.iter().filter(|a| a.enabled && a.is_core()) {
-+        let base_url = AddonClient::base_addon_url(&addon.manifest_url);
-+        let mut wanted: Vec<(String, String)> = Vec::new();
-+        for cat in &addon.catalogs {
-+            if cat.r#type.trim().is_empty() || cat.id.trim().is_empty() {
-+                continue;
-+            }
-+            if cat
-+                .extra
-+                .iter()
-+                .any(|e| e.name.eq_ignore_ascii_case("search"))
-+            {
-+                wanted.push((cat.r#type.clone(), cat.id.clone()));
-+            }
-+        }
-+        if wanted.is_empty() && addon.is_core() {
-+            wanted.push(("movie".to_string(), "top".to_string()));
-+            wanted.push(("series".to_string(), "top".to_string()));
-+        }
-+        for (r#type, catalog_id) in wanted {
-+            let duplicate = targets.iter().any(|t| {
-+                t.base_url == base_url
-+                    && t.r#type.eq_ignore_ascii_case(&r#type)
-+                    && t.catalog_id == catalog_id
-+            });
-+            if !duplicate && targets.len() < MAX_SEARCH_TARGETS {
-+                targets.push(SearchTarget {
-+                    addon: addon.name.clone(),
-+                    base_url: base_url.clone(),
-+                    r#type,
-+                    catalog_id,
-+                });
-+            }
-+        }
-+    }
-+    targets
-+}
 +
 +fn video_key(v: &models::MetaVideo) -> (usize, usize) {
 +    (
@@ -2171,7 +1981,7 @@ index 6d7af7f..f6fa808 100644
 +    }
 +}
 diff --git a/src/providers/addons/models.rs b/src/providers/addons/models.rs
-index 7b392a9..512ded1 100644
+index 7b392a9..1396ad3 100644
 --- a/src/providers/addons/models.rs
 +++ b/src/providers/addons/models.rs
 @@ -130,6 +130,27 @@ where
@@ -2250,236 +2060,12 @@ index 7b392a9..512ded1 100644
  }
  
  #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-@@ -440,6 +478,8 @@ pub struct InstalledAddon {
-     pub id_prefixes: Vec<String>,
-     #[serde(default)]
-     pub types: Vec<String>,
-+    #[serde(default)]
-+    pub catalogs: Vec<CatalogDefinition>,
- }
- 
- impl InstalledAddon {
-@@ -457,6 +497,7 @@ impl InstalledAddon {
-             provides_stream: false,
-             id_prefixes: vec!["tt".to_string()],
-             types: vec!["movie".to_string(), "series".to_string()],
-+            catalogs: Vec::new(),
-         }
-     }
- 
-@@ -477,6 +518,7 @@ impl InstalledAddon {
-             provides_stream: manifest.provides_stream(),
-             id_prefixes: manifest.id_prefixes.clone(),
-             types: manifest.types.clone(),
-+            catalogs: manifest.catalogs.clone(),
-         }
-     }
- }
-@@ -490,11 +532,80 @@ pub struct AddonCatalogTarget {
-     pub catalog_id: String,
- }
- 
-+const MAX_BROWSE_CATALOGS: usize = 32;
-+
-+fn humanize_catalog_token(raw: &str) -> String {
-+    match raw.trim() {
-+        "top" | "popular" | "Popular" => "Top".to_string(),
-+        "imdbRating" | "Featured" | "featured" => "Top Rated".to_string(),
-+        "year" | "New" => "New".to_string(),
-+        other if !other.contains(' ') && (other.contains('-') || other.contains('_')) => other
-+            .split(['-', '_'])
-+            .filter(|w| !w.is_empty())
-+            .map(|w| {
-+                let mut c = w.chars();
-+                match c.next() {
-+                    Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
-+                    None => String::new(),
-+                }
-+            })
-+            .collect::<Vec<_>>()
-+            .join(" "),
-+        other => other.to_string(),
-+    }
-+}
-+
-+fn format_catalog_label(cat: &CatalogDefinition, addon_name: &str, multi: bool) -> String {
-+    let type_label = match cat.r#type.to_ascii_lowercase().as_str() {
-+        "movie" | "movies" => "Movies".to_string(),
-+        "series" | "tv" | "show" | "shows" => "Series".to_string(),
-+        "anime" => "Anime".to_string(),
-+        "channel" | "channels" => "Channels".to_string(),
-+        other => humanize_catalog_token(other),
-+    };
-+    let raw_name = cat
-+        .name
-+        .as_deref()
-+        .map(str::trim)
-+        .filter(|s| !s.is_empty())
-+        .unwrap_or(cat.id.as_str());
-+    let clean_name = humanize_catalog_token(raw_name);
-+    let lower_name = clean_name.to_ascii_lowercase();
-+    let lower_type = type_label.to_ascii_lowercase();
-+    let base = if clean_name.is_empty() || lower_name == lower_type {
-+        format!("Top {type_label}")
-+    } else if lower_name.contains(&lower_type)
-+        || (lower_type == "movies" && lower_name.contains("movie"))
-+        || (lower_type == "series" && (lower_name.contains("series") || lower_name.contains("show")))
-+    {
-+        clean_name
-+    } else {
-+        format!("{clean_name} {type_label}")
-+    };
-+    if multi && !base.to_ascii_lowercase().contains(&addon_name.to_ascii_lowercase()) {
-+        format!("{base} ({addon_name})")
-+    } else {
-+        base
-+    }
-+}
-+
-+fn push_unique_target(targets: &mut Vec<AddonCatalogTarget>, target: AddonCatalogTarget) {
-+    if targets.len() < MAX_BROWSE_CATALOGS
-+        && !targets.iter().any(|existing| {
-+            existing.manifest_url == target.manifest_url
-+                && existing.r#type.eq_ignore_ascii_case(&target.r#type)
-+                && existing.catalog_id == target.catalog_id
-+        })
-+    {
-+        targets.push(target);
-+    }
-+}
-+
- pub fn curated_catalog_presets(addons: &[InstalledAddon]) -> Vec<AddonCatalogTarget> {
--    let mut targets = Vec::new();
-+    let mut targets: Vec<AddonCatalogTarget> = Vec::new();
-     let enabled_catalogs: Vec<&InstalledAddon> = addons
-         .iter()
--        .filter(|a| a.enabled && a.provides_catalog)
-+        .filter(|a| a.enabled && a.is_core())
-         .collect();
- 
-     let multi = enabled_catalogs.len() > 1;
-@@ -506,13 +617,43 @@ pub fn curated_catalog_presets(addons: &[InstalledAddon]) -> Vec<AddonCatalogTar
-             String::new()
-         };
- 
-+        let browsable: Vec<&CatalogDefinition> = addon
-+            .catalogs
-+            .iter()
-+            .filter(|c| {
-+                !c.r#type.trim().is_empty()
-+                    && !c.id.trim().is_empty()
-+                    && !c.extra.iter().any(|e| e.is_required)
-+            })
-+            .collect();
-+
-+        if !browsable.is_empty() {
-+            for cat in browsable {
-+                push_unique_target(&mut targets, AddonCatalogTarget {
-+                    label: format_catalog_label(cat, &addon.name, multi),
-+                    addon_name: addon.name.clone(),
-+                    manifest_url: addon.manifest_url.clone(),
-+                    r#type: cat.r#type.clone(),
-+                    catalog_id: cat.id.clone(),
-+                });
-+            }
-+            continue;
-+        }
-+
-+        // Only Cinemeta has a built-in "top" catalog. Any other addon is listed
-+        // only for catalogs its manifest really declares; inventing a "top"
-+        // catalog for it makes hosts answer 403/404.
-+        if !addon.is_core() {
-+            continue;
-+        }
-+
-         let has_movies =
-             addon.types.is_empty() || addon.types.iter().any(|t| t.eq_ignore_ascii_case("movie"));
-         let has_series =
-             addon.types.is_empty() || addon.types.iter().any(|t| t.eq_ignore_ascii_case("series"));
- 
-         if has_movies {
--            targets.push(AddonCatalogTarget {
-+            push_unique_target(&mut targets, AddonCatalogTarget {
-                 label: format!("Top Movies{suffix}"),
-                 addon_name: addon.name.clone(),
-                 manifest_url: addon.manifest_url.clone(),
-@@ -521,7 +662,7 @@ pub fn curated_catalog_presets(addons: &[InstalledAddon]) -> Vec<AddonCatalogTar
-             });
-         }
-         if has_series {
--            targets.push(AddonCatalogTarget {
-+            push_unique_target(&mut targets, AddonCatalogTarget {
-                 label: format!("Top Series{suffix}"),
-                 addon_name: addon.name.clone(),
-                 manifest_url: addon.manifest_url.clone(),
-@@ -530,7 +671,7 @@ pub fn curated_catalog_presets(addons: &[InstalledAddon]) -> Vec<AddonCatalogTar
-             });
-         }
-         if has_movies && addon.is_core() {
--            targets.push(AddonCatalogTarget {
-+            push_unique_target(&mut targets, AddonCatalogTarget {
-                 label: format!("Top Rated Movies{suffix}"),
-                 addon_name: addon.name.clone(),
-                 manifest_url: addon.manifest_url.clone(),
-@@ -539,7 +680,7 @@ pub fn curated_catalog_presets(addons: &[InstalledAddon]) -> Vec<AddonCatalogTar
-             });
-         }
-         if has_series && addon.is_core() {
--            targets.push(AddonCatalogTarget {
-+            push_unique_target(&mut targets, AddonCatalogTarget {
-                 label: format!("Top Rated Series{suffix}"),
-                 addon_name: addon.name.clone(),
-                 manifest_url: addon.manifest_url.clone(),
-@@ -547,7 +688,7 @@ pub fn curated_catalog_presets(addons: &[InstalledAddon]) -> Vec<AddonCatalogTar
-                 catalog_id: "imdbRating".to_string(),
-             });
-         }
--        if targets.len() >= 6 {
-+        if targets.len() >= MAX_BROWSE_CATALOGS {
-             break;
-         }
-     }
-@@ -584,6 +725,33 @@ pub fn curated_catalog_presets(addons: &[InstalledAddon]) -> Vec<AddonCatalogTar
-         });
-     }
- 
--    targets.truncate(6);
-+    targets.truncate(MAX_BROWSE_CATALOGS);
-     targets
- }
-+
-+/// Finds a catalog target matching a `/browse <filter>` query by label, addon
-+/// name, catalog ID, or media type.
-+pub fn find_catalog_preset(addons: &[InstalledAddon], filter: &str) -> Option<AddonCatalogTarget> {
-+    let needle = filter.trim().to_ascii_lowercase();
-+    if needle.is_empty() {
-+        return None;
-+    }
-+    let presets = curated_catalog_presets(addons);
-+    presets
-+        .iter()
-+        .find(|t| t.label.to_ascii_lowercase() == needle)
-+        .or_else(|| {
-+            presets
-+                .iter()
-+                .find(|t| t.label.to_ascii_lowercase().starts_with(&needle))
-+        })
-+        .or_else(|| {
-+            presets.iter().find(|t| {
-+                t.label.to_ascii_lowercase().contains(&needle)
-+                    || t.addon_name.to_ascii_lowercase().contains(&needle)
-+                    || t.catalog_id.to_ascii_lowercase().contains(&needle)
-+                    || t.r#type.to_ascii_lowercase().contains(&needle)
-+            })
-+        })
-+        .cloned()
-+}
 diff --git a/src/providers/addons/nuvio.rs b/src/providers/addons/nuvio.rs
 new file mode 100644
-index 0000000..77d020c
+index 0000000..e2da3a6
 --- /dev/null
 +++ b/src/providers/addons/nuvio.rs
-@@ -0,0 +1,862 @@
+@@ -0,0 +1,861 @@
 +//! Nuvio plugin support.
 +//!
 +//! A Nuvio plugin repository is a `manifest.json` with a `scrapers` list; each
@@ -2748,7 +2334,6 @@ index 0000000..77d020c
 +        provides_stream: true,
 +        id_prefixes: vec!["tt".to_string()],
 +        types: scraper.types.clone(),
-+        catalogs: Vec::new(),
 +    }
 +}
 +
@@ -4065,70 +3650,6 @@ index 0000000..6e5af27
 +        assert!(normalize_magnet("https://x.test/a", None, None, &[]).is_none());
 +    }
 +}
-diff --git a/src/service.rs b/src/service.rs
-index e4e5027..46249d1 100644
---- a/src/service.rs
-+++ b/src/service.rs
-@@ -137,6 +137,59 @@ impl MovieBoxService {
-         Ok(items)
-     }
- 
-+    pub async fn fetch_addon_catalog_page(
-+        &self,
-+        manifest_url: &str,
-+        r#type: &str,
-+        catalog_id: &str,
-+        page: usize,
-+        skip: usize,
-+    ) -> Result<Vec<CatalogItem>, String> {
-+        if page <= 1 || skip == 0 {
-+            return self
-+                .fetch_addon_catalog(manifest_url, r#type, catalog_id)
-+                .await;
-+        }
-+        let paged_id = format!("{catalog_id}_skip_{skip}");
-+        let manifest_clone = manifest_url.to_string();
-+        let type_clone = r#type.to_string();
-+        let cat_id_clone = paged_id.clone();
-+        if let Ok(Some(cached)) = tokio::task::spawn_blocking(move || {
-+            crate::cache::get_addon_catalog_cache_typed(&manifest_clone, &type_clone, &cat_id_clone)
-+        })
-+        .await
-+        {
-+            return Ok(cached);
-+        }
-+
-+        let base_url = crate::providers::addons::AddonClient::base_addon_url(manifest_url);
-+        let extra = format!("skip={skip}");
-+        let metas = self
-+            .addon_client
-+            .fetch_catalog(&base_url, r#type, catalog_id, Some(&extra))
-+            .await
-+            .map_err(|e| e.to_string())?;
-+
-+        let items: Vec<CatalogItem> = metas
-+            .iter()
-+            .map(crate::providers::addons::adapter::meta_to_catalog_item)
-+            .collect();
-+
-+        let manifest_clone = manifest_url.to_string();
-+        let type_clone = r#type.to_string();
-+        let cat_id_clone = paged_id;
-+        let items_clone = items.clone();
-+        tokio::task::spawn_blocking(move || {
-+            crate::cache::set_addon_catalog_cache_typed(
-+                &manifest_clone,
-+                &type_clone,
-+                &cat_id_clone,
-+                &items_clone,
-+            );
-+        });
-+        Ok(items)
-+    }
-+
-     pub async fn details_typed(
-         &self,
-         provider: ProviderKind,
 diff --git a/src/torrent_engine.rs b/src/torrent_engine.rs
 new file mode 100644
 index 0000000..400e6a1
@@ -5205,64 +4726,10 @@ index f4617e7..974e82a 100644
                          self.action_sender.send(Action::TabPane).ok();
                      }
 diff --git a/src/tui/app/navigation.rs b/src/tui/app/navigation.rs
-index 3279bac..ea19349 100644
+index 3279bac..6c44745 100644
 --- a/src/tui/app/navigation.rs
 +++ b/src/tui/app/navigation.rs
-@@ -117,7 +117,6 @@ impl App {
-             || self.state.is_loading
-             || self.state.search_results.is_empty()
-             || self.state.active_browse_preset.is_some()
--            || self.state.active_addon_catalog.is_some()
-             || self.state.search_query.trim().starts_with('/')
-             || (!self.state.is_homepage_mode && self.state.search_exhausted)
-         {
-@@ -143,6 +142,45 @@ impl App {
-                         page: next_page,
-                     })
-                     .ok();
-+            } else if let Some(target) = self.state.active_addon_catalog.clone() {
-+                let skip = self.state.search_results.len();
-+                let service = self.service.clone();
-+                let sender = self.action_sender.clone();
-+                let context = self.request_context();
-+                let request_id = self.state.active_search_request;
-+                self.state.is_loading = true;
-+                if let Some(h) = self.request_tasks.search.take() {
-+                    h.abort();
-+                }
-+                self.request_tasks.search = Some(tokio::spawn(async move {
-+                    let result = service
-+                        .fetch_addon_catalog_page(
-+                            &target.manifest_url,
-+                            &target.r#type,
-+                            &target.catalog_id,
-+                            next_page,
-+                            skip,
-+                        )
-+                        .await;
-+                    match result {
-+                        Ok(items) => {
-+                            sender
-+                                .send(Action::SearchSuccess {
-+                                    context,
-+                                    request_id,
-+                                    query: String::new(),
-+                                    page: next_page,
-+                                    items,
-+                                })
-+                                .ok();
-+                        }
-+                        Err(e) => {
-+                            sender
-+                                .send(Action::SearchFailure(context, request_id, next_page, e))
-+                                .ok();
-+                        }
-+                    }
-+                }));
-             } else {
-                 let query = self.state.search_query.to_string();
-                 let service = self.service.clone();
-@@ -298,6 +336,8 @@ impl App {
+@@ -298,6 +298,8 @@ impl App {
                      pool.episode_index.insert((se, ep), streams.clone());
                  }
                  self.state.selected_resources.clear();
@@ -5271,7 +4738,7 @@ index 3279bac..ea19349 100644
                  self.state.is_loading = true;
                  self.state.is_fetching_streams = true;
                  self.state.set_status_short("Loading streams...");
-@@ -314,6 +354,8 @@ impl App {
+@@ -314,6 +316,8 @@ impl App {
                      .ok();
              } else {
                  self.state.selected_resources.clear();
@@ -5280,7 +4747,7 @@ index 3279bac..ea19349 100644
                  self.state.is_loading = true;
                  self.state.is_fetching_streams = true;
                  self.state.set_status_short("Loading streams...");
-@@ -342,7 +384,18 @@ impl App {
+@@ -342,7 +346,18 @@ impl App {
  
      pub(super) fn get_selected_release(&self) -> Option<Release> {
          let idx = self.state.resource_list_state.selected()?;
@@ -5300,7 +4767,7 @@ index 3279bac..ea19349 100644
      }
  }
  
-@@ -397,7 +450,25 @@ impl App {
+@@ -397,7 +412,25 @@ impl App {
                      return None;
                  }
                  if !self.state.notifications.is_empty() {
@@ -5326,7 +4793,7 @@ index 3279bac..ea19349 100644
                      return None;
                  }
                  if self.state.favorites_focus {
-@@ -473,6 +544,8 @@ impl App {
+@@ -473,6 +506,8 @@ impl App {
                  {
                      let next_id = dub.subject_id.clone();
                      self.state.selected_resources.clear();
@@ -5335,7 +4802,7 @@ index 3279bac..ea19349 100644
                      self.state.resource_list_state.select(None);
                      self.state.language_chosen = true;
                      self.state.language_list_state.select(Some(idx));
-@@ -653,7 +726,7 @@ impl App {
+@@ -653,7 +688,7 @@ impl App {
                      Screen::Details => match self.state.details_pane {
                          crate::tui::state::DetailsPane::Streams => {
                              let current = self.state.resource_list_state.selected().unwrap_or(0);
@@ -5344,7 +4811,7 @@ index 3279bac..ea19349 100644
                                  self.state.resource_list_state.select(Some(current + 1));
                              }
                          }
-@@ -843,6 +916,8 @@ impl App {
+@@ -843,6 +878,8 @@ impl App {
                          );
                          self.state.selected_details = Some(fallback_details);
                          self.state.selected_resources.clear();
@@ -5353,7 +4820,7 @@ index 3279bac..ea19349 100644
                          self.state.is_loading = true;
                          self.state.is_fetching_streams = false;
                          self.state.stream_error = None;
-@@ -927,6 +1002,8 @@ impl App {
+@@ -927,6 +964,8 @@ impl App {
                  MediaDetails::from_search_result(&item, self.state.search_preview.as_ref());
              self.state.selected_details = Some(fallback_details);
              self.state.selected_resources.clear();
@@ -5664,73 +5131,10 @@ index 4aeeeb9..ae31f62 100644
 +    }
  }
 diff --git a/src/tui/app/requests.rs b/src/tui/app/requests.rs
-index 5f22bfe..8d52bed 100644
+index 5f22bfe..beb8c99 100644
 --- a/src/tui/app/requests.rs
 +++ b/src/tui/app/requests.rs
-@@ -257,6 +257,7 @@ impl App {
-                 let manifest_url = target.manifest_url.clone();
-                 let r_type = target.r#type.clone();
-                 let cat_id = target.catalog_id.clone();
-+                let addon_name = target.addon_name.clone();
-                 self.request_tasks.spawn_search(async move {
-                     let result = service
-                         .fetch_addon_catalog(&manifest_url, &r_type, &cat_id)
-@@ -275,7 +276,12 @@ impl App {
-                         }
-                         Err(error) => {
-                             sender
--                                .send(Action::SearchFailure(context, request_id, 1, error))
-+                                .send(Action::SearchFailure(
-+                                    context,
-+                                    request_id,
-+                                    1,
-+                                    format!("{addon_name}: {error}"),
-+                                ))
-                                 .ok();
-                         }
-                     }
-@@ -416,9 +422,13 @@ impl App {
- 
-                 if page <= 1 {
-                     self.state.search_results = new_results;
--                    sort_results(&mut self.state.search_results, &query);
-+                    if self.state.active_addon_catalog.is_none() {
-+                        sort_results(&mut self.state.search_results, &query);
-+                    }
-                 } else {
--                    sort_results(&mut new_results, &query);
-+                    if self.state.active_addon_catalog.is_none() {
-+                        sort_results(&mut new_results, &query);
-+                    }
-                     self.state.search_results.extend(new_results);
-                 }
-                 if let Some(prev_id) = previous_selected_id {
-@@ -442,10 +452,21 @@ impl App {
- 
-                 self.state
-                     .set_status_default(if self.state.search_results.is_empty() {
-+                        if let Some(cat) = &self.state.active_addon_catalog {
-+                            format!("No items found in {} ({}).", cat.label, cat.addon_name)
-+                        } else {
-+                            format!(
-+                                "No matches for '{}' on {}. Press Ctrl+P to try another provider.",
-+                                query,
-+                                context.provider.label()
-+                            )
-+                        }
-+                    } else if let Some(cat) = &self.state.active_addon_catalog {
-                         format!(
--                            "No matches for '{}' on {}. Press Ctrl+P to try another provider.",
--                            query,
--                            context.provider.label()
-+                            "Loaded {} titles from {} ({}).",
-+                            self.state.search_results.len(),
-+                            cat.label,
-+                            cat.addon_name
-                         )
-                     } else {
-                         format!(
-@@ -635,7 +656,9 @@ impl App {
+@@ -635,7 +635,9 @@ impl App {
                      self.state.poster_protocol = None;
                      return None;
                  }
@@ -5741,7 +5145,7 @@ index 5f22bfe..8d52bed 100644
                      self.state.preview_loading = false;
                      self.state.search_preview = Some(cached.clone());
                      self.state.poster_image = None;
-@@ -1230,6 +1253,8 @@ impl App {
+@@ -1230,6 +1232,8 @@ impl App {
                  self.state.is_fetching_streams = true;
                  self.state.has_streams_settled = false;
                  self.state.selected_resources.clear();
@@ -5750,7 +5154,7 @@ index 5f22bfe..8d52bed 100644
                  self.state.stream_error = None;
  
                  if force_refresh {
-@@ -1297,34 +1322,99 @@ impl App {
+@@ -1297,34 +1301,99 @@ impl App {
                              return;
                          }
  
@@ -5869,7 +5273,7 @@ index 5f22bfe..8d52bed 100644
  
                              sender
                                  .send(Action::EpisodeStreamsReady(
-@@ -1339,7 +1429,12 @@ impl App {
+@@ -1339,7 +1408,12 @@ impl App {
                                      id,
                                      season,
                                      episode,
@@ -5883,7 +5287,7 @@ index 5f22bfe..8d52bed 100644
                                  ))
                                  .ok();
                          }
-@@ -1566,11 +1661,21 @@ impl App {
+@@ -1566,11 +1640,21 @@ impl App {
                                  } else {
                                      !link.is_empty() && link == i_link
                                  };
@@ -5908,7 +5312,7 @@ index 5f22bfe..8d52bed 100644
                                          i.mirrors = item.mirrors.clone();
                                      }
                                      exists = true;
-@@ -1604,10 +1709,12 @@ impl App {
+@@ -1604,10 +1688,12 @@ impl App {
                  }
  
                  let mut filtered = raw_list;
@@ -5923,7 +5327,7 @@ index 5f22bfe..8d52bed 100644
                      if let Some(subject_id) = &self.state.active_subject_id {
                          let id_clone = subject_id.clone();
                          let filtered_clone = filtered.clone();
-@@ -1623,12 +1730,21 @@ impl App {
+@@ -1623,12 +1709,21 @@ impl App {
                      }
                  }
  
@@ -5946,7 +5350,7 @@ index 5f22bfe..8d52bed 100644
                      let saved_stream = self
                          .state
                          .active_subject_id
-@@ -1647,8 +1763,7 @@ impl App {
+@@ -1647,8 +1742,7 @@ impl App {
                          })
                          .and_then(|item| item.stream_filename.as_deref());
                      if let Some(target_file) = saved_stream {
@@ -5956,7 +5360,7 @@ index 5f22bfe..8d52bed 100644
                              .iter()
                              .position(|r| r.filename == target_file)
                              .or(Some(0))
-@@ -1658,6 +1773,9 @@ impl App {
+@@ -1658,6 +1752,9 @@ impl App {
                  } else {
                      None
                  };
@@ -5966,7 +5370,7 @@ index 5f22bfe..8d52bed 100644
                  self.state.resource_list_state.select(preferred_stream_idx);
                  self.state
                      .set_status_default(format!("{} streams available.", count));
-@@ -1746,6 +1864,87 @@ impl App {
+@@ -1746,6 +1843,87 @@ impl App {
                  }
              }
  
@@ -6068,62 +5472,10 @@ index faa4ecc..4843cf1 100644
              | Action::InitStreamPool(..)
              | Action::StreamPoolInitialized(..)
 diff --git a/src/tui/app/search.rs b/src/tui/app/search.rs
-index ef713dd..bc1b883 100644
+index ef713dd..b8da870 100644
 --- a/src/tui/app/search.rs
 +++ b/src/tui/app/search.rs
-@@ -156,7 +156,50 @@ impl App {
-                         format!("Available in Streaming Mode ({ctrl_s})."),
-                     );
-                 } else {
--                    self.action_sender.send(Action::ShowBrowseMenu).ok();
-+                    let arg = trimmed
-+                        .split_once(char::is_whitespace)
-+                        .map(|(_, rest)| rest.trim())
-+                        .unwrap_or("");
-+                    if !arg.is_empty() {
-+                        if self.state.active_provider
-+                            == crate::providers::models::ProviderKind::Addons
-+                        {
-+                            if let Some(target) =
-+                                crate::providers::addons::models::find_catalog_preset(
-+                                    &self.state.installed_addons,
-+                                    arg,
-+                                )
-+                            {
-+                                self.action_sender
-+                                    .send(Action::SelectAddonCatalog(target))
-+                                    .ok();
-+                            } else {
-+                                self.state.notify(
-+                                    NotificationKind::Info,
-+                                    "Browse Addons",
-+                                    format!("No addon catalog matched '{arg}'. Showing all catalogs."),
-+                                );
-+                                self.action_sender.send(Action::ShowBrowseMenu).ok();
-+                            }
-+                        } else if self.state.active_provider
-+                            == crate::providers::models::ProviderKind::MovieBox
-+                        {
-+                            let needle = arg.to_ascii_lowercase();
-+                            if let Some(preset) = crate::tui::state::BrowsePreset::ALL
-+                                .iter()
-+                                .copied()
-+                                .find(|p| p.label().to_ascii_lowercase().contains(&needle))
-+                            {
-+                                self.action_sender.send(Action::SelectBrowse(preset)).ok();
-+                            } else {
-+                                self.action_sender.send(Action::ShowBrowseMenu).ok();
-+                            }
-+                        } else {
-+                            self.action_sender.send(Action::ShowBrowseMenu).ok();
-+                        }
-+                    } else {
-+                        self.action_sender.send(Action::ShowBrowseMenu).ok();
-+                    }
-                 }
-                 Some(true)
-             }
-@@ -212,6 +255,8 @@ impl App {
+@@ -212,6 +212,8 @@ impl App {
          self.state.active_subject_id = None;
          self.state.selected_details = None;
          self.state.selected_resources.clear();
@@ -6132,12 +5484,7 @@ index ef713dd..bc1b883 100644
          self.state.is_loading = true;
          self.state.has_search_settled = false;
          self.state.search_error = None;
-@@ -238,10 +283,13 @@ impl App {
-         self.state.active_addon_catalog = Some(target.clone());
-         self.state.browse_metrics.clear();
-         self.state.current_page = 1;
-+        self.state.search_exhausted = false;
-         self.state.active_screen = Screen::Home;
+@@ -242,6 +244,8 @@ impl App {
          self.state.active_subject_id = None;
          self.state.selected_details = None;
          self.state.selected_resources.clear();
@@ -6146,7 +5493,7 @@ index ef713dd..bc1b883 100644
          self.state.is_loading = true;
          self.state.has_search_settled = false;
          self.state.search_error = None;
-@@ -378,7 +426,9 @@ impl App {
+@@ -378,7 +382,9 @@ impl App {
      ) {
          self.request_tasks.cancel_details();
          let request_id = self.state.active_details_request;
@@ -6158,7 +5505,7 @@ index ef713dd..bc1b883 100644
                  self.action_sender
                      .send(Action::DetailsSuccess(
 diff --git a/src/tui/app/system.rs b/src/tui/app/system.rs
-index 3b0bec3..5b9cff9 100644
+index 3b0bec3..a26373d 100644
 --- a/src/tui/app/system.rs
 +++ b/src/tui/app/system.rs
 @@ -8,6 +8,7 @@ impl App {
@@ -6181,68 +5528,6 @@ index 3b0bec3..5b9cff9 100644
                                  let preferred_stream_idx = if count > 0 {
                                      let provider_key =
                                          self.provider_for_subject(&subject_id).cache_key();
-@@ -184,6 +189,12 @@ impl App {
-                             .send(Action::FetchHomepage { tab_id, page: 1 })
-                             .ok();
-                     } else if let Some(catalog) = self.state.active_addon_catalog.clone() {
-+                        // `r` means "fetch it again": drop the cached copy first.
-+                        crate::cache::invalidate_addon_catalog_cache(
-+                            &catalog.manifest_url,
-+                            &catalog.r#type,
-+                            &catalog.catalog_id,
-+                        );
-                         self.action_sender
-                             .send(Action::SelectAddonCatalog(catalog))
-                             .ok();
-diff --git a/src/tui/commands.rs b/src/tui/commands.rs
-index 9994497..05347f6 100644
---- a/src/tui/commands.rs
-+++ b/src/tui/commands.rs
-@@ -77,6 +77,33 @@ impl SlashCommand {
-         let lower = query.to_ascii_lowercase();
-         let mut results = Vec::new();
- 
-+        if let Some(arg) = lower.strip_prefix("/browse ")
-+            && Self::Browse.is_available(state)
-+        {
-+            let needle = arg.trim();
-+            if state.active_provider == crate::providers::models::ProviderKind::Addons {
-+                for preset in
-+                    crate::providers::addons::models::curated_catalog_presets(&state.installed_addons)
-+                {
-+                    if needle.is_empty()
-+                        || preset.label.to_ascii_lowercase().contains(needle)
-+                        || preset.addon_name.to_ascii_lowercase().contains(needle)
-+                        || preset.catalog_id.to_ascii_lowercase().contains(needle)
-+                        || preset.r#type.to_ascii_lowercase().contains(needle)
-+                    {
-+                        results.push(format!("/browse {}", preset.label));
-+                    }
-+                }
-+            } else if state.active_provider == crate::providers::models::ProviderKind::MovieBox {
-+                for preset in crate::tui::state::BrowsePreset::ALL {
-+                    if needle.is_empty() || preset.label().to_ascii_lowercase().contains(needle) {
-+                        results.push(format!("/browse {}", preset.label()));
-+                    }
-+                }
-+            }
-+            return results;
-+        }
-+
-         for cmd in Self::ALL {
-             let name = cmd.name();
-             if !cmd.is_available(state) {
-@@ -97,6 +124,10 @@ impl SlashCommand {
-             return None;
-         };
- 
-+        if trimmed.len() > 7 && trimmed[..7].eq_ignore_ascii_case("/browse") {
-+            return Some(Self::Browse.description(state));
-+        }
-+
-         match trimmed {
-             "/settings" => Some(Self::Settings.description(state)),
-             "/config" => Some(Self::Config.description(state)),
 diff --git a/src/tui/overlay.rs b/src/tui/overlay.rs
 index 09039ff..cf6b121 100644
 --- a/src/tui/overlay.rs
@@ -6865,34 +6150,6 @@ index 6ad09d3..8f72ef6 100644
 +        assert!(rendered.contains("BrokenAddon (!)"));
 +    }
  }
-diff --git a/src/tui/screens/home.rs b/src/tui/screens/home.rs
-index 327ba8b..97c1749 100644
---- a/src/tui/screens/home.rs
-+++ b/src/tui/screens/home.rs
-@@ -3101,6 +3101,7 @@ mod tests {
-                     provides_stream: false,
-                     id_prefixes: vec![],
-                     types: vec![],
-+                    catalogs: vec![],
-                 },
-                 crate::providers::addons::models::InstalledAddon {
-                     manifest_url: "https://x2".into(),
-@@ -3113,6 +3114,7 @@ mod tests {
-                     provides_stream: false,
-                     id_prefixes: vec![],
-                     types: vec![],
-+                    catalogs: vec![],
-                 },
-                 crate::providers::addons::models::InstalledAddon {
-                     manifest_url: "https://x3".into(),
-@@ -3125,6 +3127,7 @@ mod tests {
-                     provides_stream: false,
-                     id_prefixes: vec![],
-                     types: vec![],
-+                    catalogs: vec![],
-                 },
-             ],
-             addon_manager_selected: 2,
 diff --git a/src/tui/state.rs b/src/tui/state.rs
 index 87033f8..94dac61 100644
 --- a/src/tui/state.rs
@@ -7190,7 +6447,7 @@ index 87033f8..94dac61 100644
 +    }
  }
 diff --git a/tests/addons_manifest.rs b/tests/addons_manifest.rs
-index 6f3eb39..3f13a40 100644
+index 6f3eb39..484da38 100644
 --- a/tests/addons_manifest.rs
 +++ b/tests/addons_manifest.rs
 @@ -117,6 +117,7 @@ fn test_addon_episode_stream_filtering_and_isolation() {
@@ -7241,69 +6498,7 @@ index 6f3eb39..3f13a40 100644
      };
  
      let release = stream_item_to_release("HdHub", &stream, 1, 1).expect("valid release");
-@@ -291,10 +297,61 @@ fn test_installed_addon_cinemeta_protection() {
-         provides_stream: true,
-         id_prefixes: vec!["tt".to_string()],
-         types: vec!["movie".to_string(), "series".to_string()],
-+        catalogs: vec![],
-     };
-     assert!(!community_addon.is_core());
- }
- 
-+#[test]
-+fn test_curated_catalog_presets_keeps_only_cinemeta_even_when_addons_have_catalogs() {
-+    use moviebox_tui::providers::addons::models::{
-+        AddonManifest, CatalogDefinition, CatalogExtra, curated_catalog_presets,
-+        find_catalog_preset,
-+    };
-+
-+    let raw_manifest = r#"{
-+        "id": "org.kitsu.anime",
-+        "name": "Kitsu Anime",
-+        "version": "1.0.0",
-+        "resources": ["catalog", "meta"],
-+        "types": ["anime", "series"],
-+        "catalogs": [
-+            {"type": "anime", "id": "kitsu-anime-trending", "name": "Trending"},
-+            {"type": "anime", "id": "kitsu-anime-popular", "name": "Popular"},
-+            {"type": "anime", "id": "kitsu-anime-search", "name": "Search", "extra": [{"name": "search", "isRequired": true}]}
-+        ]
-+    }"#;
-+    let manifest: AddonManifest = serde_json::from_str(raw_manifest).unwrap();
-+    let kitsu = InstalledAddon::from_manifest(
-+        "https://kitsu.example.com/manifest.json".to_string(),
-+        &manifest,
-+    );
-+    assert_eq!(kitsu.catalogs.len(), 3);
-+
-+    let addons = vec![InstalledAddon::cinemeta_default(), kitsu];
-+    let presets = curated_catalog_presets(&addons);
-+    assert!(!presets.iter().any(|p| p.catalog_id == "kitsu-anime-trending"));
-+    assert!(!presets.iter().any(|p| p.catalog_id == "kitsu-anime-popular"));
-+    assert!(!presets.iter().any(|p| p.catalog_id == "kitsu-anime-search"));
-+    assert!(presets.iter().all(|p| p.addon_name == "Cinemeta"));
-+    assert!(!presets.is_empty());
-+
-+    assert!(find_catalog_preset(&addons, "trending").is_none());
-+    let matched = find_catalog_preset(&addons, "top rated").expect("cinemeta preset");
-+    assert_eq!(matched.addon_name, "Cinemeta");
-+
-+    let _ = (CatalogDefinition {
-+        r#type: "movie".to_string(),
-+        id: "top".to_string(),
-+        name: None,
-+        extra: vec![CatalogExtra {
-+            name: "genre".to_string(),
-+            is_required: false,
-+            options: None,
-+        }],
-+    },);
-+}
-+
- #[tokio::test]
- async fn test_invalid_addon_manifest_url_shows_actionable_error_and_preserves_state() {
-     let client = moviebox_tui::providers::addons::client::AddonClient::new();
-@@ -319,7 +376,7 @@ async fn test_invalid_addon_manifest_url_shows_actionable_error_and_preserves_st
+@@ -319,7 +325,7 @@ async fn test_invalid_addon_manifest_url_shows_actionable_error_and_preserves_st
  }
  
  #[test]
@@ -7312,7 +6507,7 @@ index 6f3eb39..3f13a40 100644
      let raw_streams = vec![
          StreamItem {
              name: Some("HTTP 1080p Stream".to_string()),
-@@ -327,6 +384,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
+@@ -327,6 +333,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
              description: None,
              url: Some("https://example.test/stream1.mp4".to_string()),
              behavior_hints: None,
@@ -7320,7 +6515,7 @@ index 6f3eb39..3f13a40 100644
          },
          StreamItem {
              name: Some("HTTP 720p Stream".to_string()),
-@@ -334,6 +392,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
+@@ -334,6 +341,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
              description: None,
              url: Some("http://example.test/stream2.mp4".to_string()),
              behavior_hints: None,
@@ -7328,7 +6523,7 @@ index 6f3eb39..3f13a40 100644
          },
          StreamItem {
              name: Some("Magnet Link".to_string()),
-@@ -341,6 +400,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
+@@ -341,6 +349,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
              description: None,
              url: Some("magnet:?xt=urn:btih:d08244124e9f0863014f56947ab51404ec102770".to_string()),
              behavior_hints: None,
@@ -7336,7 +6531,7 @@ index 6f3eb39..3f13a40 100644
          },
          StreamItem {
              name: Some("Local File".to_string()),
-@@ -348,6 +408,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
+@@ -348,6 +357,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
              description: None,
              url: Some("file:///etc/passwd".to_string()),
              behavior_hints: None,
@@ -7344,7 +6539,7 @@ index 6f3eb39..3f13a40 100644
          },
          StreamItem {
              name: Some("FTP Stream".to_string()),
-@@ -355,6 +416,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
+@@ -355,6 +365,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
              description: None,
              url: Some("ftp://example.test/video.mkv".to_string()),
              behavior_hints: None,
@@ -7352,7 +6547,7 @@ index 6f3eb39..3f13a40 100644
          },
          StreamItem {
              name: Some("Invalid".to_string()),
-@@ -362,6 +424,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
+@@ -362,6 +373,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
              description: None,
              url: Some("not-a-valid-url-string".to_string()),
              behavior_hints: None,
@@ -7360,7 +6555,7 @@ index 6f3eb39..3f13a40 100644
          },
          StreamItem {
              name: Some("Empty".to_string()),
-@@ -369,6 +432,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
+@@ -369,6 +381,7 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
              description: None,
              url: None,
              behavior_hints: None,
@@ -7368,7 +6563,7 @@ index 6f3eb39..3f13a40 100644
          },
      ];
  
-@@ -379,7 +443,9 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
+@@ -379,7 +392,9 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
          }
      }
  
@@ -7379,7 +6574,7 @@ index 6f3eb39..3f13a40 100644
      assert_eq!(
          accepted_releases[0].mirrors[0].resolver_url,
          "https://example.test/stream1.mp4"
-@@ -388,6 +454,15 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
+@@ -388,6 +403,15 @@ fn test_addon_mixed_stream_filtering_and_magnet_rejection() {
          accepted_releases[1].mirrors[0].resolver_url,
          "http://example.test/stream2.mp4"
      );
@@ -7395,31 +6590,3 @@ index 6f3eb39..3f13a40 100644
  }
  
  #[tokio::test]
-@@ -424,3 +499,27 @@ async fn test_addon_enable_disable_and_removal_lifecycle() {
-         .await;
-     assert_eq!(app.state().installed_addons.len(), initial_count);
- }
-+
-+#[test]
-+fn test_curated_catalog_presets_skips_stream_only_addons_without_catalogs() {
-+    use moviebox_tui::providers::addons::models::{AddonManifest, curated_catalog_presets};
-+
-+    let raw_manifest = r#"{
-+        "id": "org.stream.only",
-+        "name": "HdHub",
-+        "version": "1.0.0",
-+        "resources": ["catalog", "stream"],
-+        "types": ["movie", "series"],
-+        "catalogs": []
-+    }"#;
-+    let manifest: AddonManifest = serde_json::from_str(raw_manifest).unwrap();
-+    let hdhub = InstalledAddon::from_manifest(
-+        "https://hdhub.example.com/manifest.json".to_string(),
-+        &manifest,
-+    );
-+
-+    let addons = vec![InstalledAddon::cinemeta_default(), hdhub];
-+    let presets = curated_catalog_presets(&addons);
-+    assert!(!presets.iter().any(|p| p.addon_name == "HdHub"));
-+    assert!(presets.iter().any(|p| p.addon_name == "Cinemeta"));
-+}
